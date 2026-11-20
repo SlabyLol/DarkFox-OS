@@ -47,6 +47,10 @@ sudo
 locales
 console-setup
 keyboard-configuration
+zenity
+parted
+e2fsprogs
+util-linux
 
 # Installer (install to hard drive)
 calamares
