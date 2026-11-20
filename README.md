@@ -2,75 +2,56 @@
 
 **Eigenes, privates, bootfähiges Linux-Betriebssystem** von DarkFox Co.
 
-Gebaut komplett über **GitHub Actions** → fertige ISO → direkt auf USB schreiben und booten.
+Vollständige Live-ISO mit **GUI (XFCE)**, gebaut komplett über **GitHub Actions** → USB-bootable.
 
-## Status
+## Was ist drin?
 
-Aktuell: Minimaler, funktionierender Live-OS-Kern (Linux Kernel + BusyBox + Syslinux).
-Bootet in QEMU und auf echter Hardware von USB/CD.
+- **Debian** Basis (aktuell stable/trixie oder bookworm)
+- **XFCE Desktop** (leicht, schnell, gut für Dark Theme)
+- Dark Theme + DarkFox Branding
+- Browser, Dateimanager, Terminal, Network Manager, etc.
+- Live-System + optional Installer
+- Hybrid-ISO (BIOS + UEFI)
 
-Später erweiterbar zu einem vollständigen Desktop-System (Debian-basiert oder custom).
+## So baust du die ISO
 
-## Features (aktuell)
-
-- Bootfähige Hybrid-ISO (BIOS)
-- Statisch gelinktes BusyBox Userspace
-- Minimaler Kernel
-- Drop-to-Shell nach Boot
-- GitHub Actions Workflow baut die ISO automatisch
-- Artifact zum Download
-
-## Schnellstart – ISO bauen
-
-1. Gehe zu **Actions** im Repo
+1. Repo öffnen → **Actions**
 2. Workflow **Build DarkFox OS ISO** auswählen
 3. **Run workflow** klicken
-4. Nach dem Build die ISO als Artifact herunterladen
-
-Oder lokal (Linux):
-
-```bash
-./build.sh
-```
+4. Nach dem Build (ca. 30–70 Min) Artifact `darkfox-os-iso` herunterladen
 
 ## USB erstellen
 
-**Linux / macOS:**
 ```bash
-sudo dd if=darkfox-os.iso of=/dev/sdX bs=4M status=progress oflag=sync
+sudo dd if=darkfox-os-*.iso of=/dev/sdX bs=4M status=progress oflag=sync
 ```
 
-**Windows:** Rufus oder balenaEtcher verwenden.
+Windows: **Rufus** oder **balenaEtcher**.
 
-**Wichtig:** `/dev/sdX` richtig wählen (`lsblk`), sonst Datenverlust!
-
-## Testen in QEMU
+## Testen
 
 ```bash
-qemu-system-x86_64 -cdrom darkfox-os.iso -m 512M -enable-kvm
+qemu-system-x86_64 -cdrom darkfox-os-*.iso -m 2048 -enable-kvm -vga virtio
 ```
 
-## Struktur
+## Anpassen
 
-```
-DarkFox-OS/
-├── .github/workflows/build.yml   # GitHub Actions
-├── build.sh                      # Build-Skript
-├── configs/                      # Kernel & BusyBox Configs (später)
-├── rootfs/                       # Zusätzliche Rootfs-Dateien
-└── README.md
-```
+Alles liegt unter `config/`:
+
+- `config/package-lists/` → Pakete hinzufügen/entfernen
+- `config/includes.chroot/` → eigene Dateien, Themes, Wallpaper
+- `config/hooks/` → Scripts beim Build
+- `auto/config` → live-build Einstellungen
 
 ## Roadmap
 
 - [x] Privates Repo + CI
-- [x] Minimal bootfähige ISO
-- [ ] Netzwerk-Support
-- [ ] Persistenter Storage / Installer
-- [ ] Dark-Theme Desktop (XFCE oder Hyprland)
-- [ ] Eigenes Branding + Splash
-- [ ] UEFI Support
-- [ ] Package Manager
+- [x] Minimaler Kernel+BusyBox Build (Archiv)
+- [x] Volles GUI-System mit XFCE
+- [ ] Stärkeres DarkFox Branding (Logo, Splash, Grub Theme)
+- [ ] Mehr Apps (LibreOffice, VSCodium, Steam optional)
+- [ ] Persistenter Modus / Calamares Installer
+- [ ] Hyprland Variante (später)
 
 ## Lizenz
 
