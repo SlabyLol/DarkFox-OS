@@ -30,6 +30,17 @@ cat > /etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfwm4.xml << 'XML'
 </channel>
 XML
 
+# Create the live user at build time (login must not depend on live-config)
+if ! id darkfox >/dev/null 2>&1; then
+    useradd -m -s /bin/bash darkfox
+fi
+for g in sudo audio video cdrom plugdev netdev dip lpadmin scanner bluetooth fuse; do
+    if getent group "$g" >/dev/null 2>&1; then usermod -aG "$g" darkfox; fi
+done
+echo "darkfox:live" | chpasswd
+# root password too, so there is always a way in on a text console (Ctrl+Alt+F2)
+echo "root:live" | chpasswd
+
 # sudo for the live user (no password, needed by the setup helper)
 echo "%sudo ALL=(ALL:ALL) ALL" > /etc/sudoers.d/sudo
 echo "darkfox ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/darkfox
