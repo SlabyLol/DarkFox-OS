@@ -1,22 +1,69 @@
-# Desktop
+# ---------- Desktop ----------
 task-xfce-desktop
 xfce4-terminal
 xfce4-goodies
+xfce4-power-manager
+xfce4-pulseaudio-plugin
 thunar
+thunar-archive-plugin
+thunar-volman
+file-roller
 mousepad
+ristretto
 lightdm
+lightdm-gtk-greeter
+xdg-user-dirs
+xdg-utils
+gvfs
+gvfs-backends
+udisks2
+policykit-1
+libpam-systemd
+dbus-user-session
+dbus-x11
 
-# Dark theme / looks
+# ---------- Look ----------
 arc-theme
 papirus-icon-theme
 gtk2-engines-murrine
 gtk2-engines-pixbuf
+fonts-dejavu-core
 fonts-noto
+fonts-noto-color-emoji
 fonts-liberation
+fonts-firacode
+fonts-hack
+plymouth
+imagemagick
 
-# Network & WiFi firmware (Intel / Realtek / Atheros / Broadcom)
+# ---------- Sound ----------
+pulseaudio
+pulseaudio-utils
+pavucontrol
+alsa-utils
+sound-theme-freedesktop
+mpv
+
+# ---------- Network / WiFi ----------
 network-manager
 network-manager-gnome
+wpasupplicant
+wireless-tools
+wireless-regdb
+iw
+rfkill
+usb-modeswitch
+pciutils
+usbutils
+iputils-ping
+dnsutils
+net-tools
+openssh-client
+ca-certificates
+curl
+wget
+
+# ---------- Firmware ----------
 firmware-linux
 firmware-linux-nonfree
 firmware-misc-nonfree
@@ -25,38 +72,83 @@ firmware-iwlwifi
 firmware-atheros
 firmware-brcm80211
 firmware-amd-graphics
+firmware-intel-sound
+intel-microcode
+amd64-microcode
 
-# Broadcom b43 (ucode29_mimo.fw etc.) – must download+extract at build time
-firmware-b43-installer
-firmware-b43legacy-installer
-b43-fwcutter
+# ---------- Programming ----------
+build-essential
+gcc
+g++
+make
+cmake
+ninja-build
+pkg-config
+gdb
+valgrind
+clang
+nasm
+git
+git-lfs
+python3
+python3-pip
+python3-venv
+python3-dev
+python3-setuptools
+python3-wheel
+pipx
+ipython3
+nodejs
+npm
+default-jdk
+maven
+golang
+rustc
+cargo
+sqlite3
+shellcheck
+strace
+ltrace
+jq
+ripgrep
+fd-find
+fzf
+bat
+tree
+tmux
+htop
+btop
+neovim
+vim
+nano
+geany
+geany-plugins
+meld
+rsync
+zip
+unzip
+p7zip-full
+neofetch
 
-# Browser
+# ---------- Browser ----------
 firefox-esr
 firefox-esr-l10n-de
 
-# Audio
-pulseaudio
-pavucontrol
-
-# Tools
-gparted
-htop
-neofetch
-curl
-wget
-git
-vim
-nano
+# ---------- System / Disk ----------
 sudo
 locales
 console-setup
 keyboard-configuration
 zenity
 parted
+gdisk
+gparted
 e2fsprogs
+dosfstools
+ntfs-3g
+exfat-fuse
 util-linux
 
-# Installer (install to hard drive)
+# ---------- Installer (install to hard drive) ----------
 calamares
 calamares-settings-debian
