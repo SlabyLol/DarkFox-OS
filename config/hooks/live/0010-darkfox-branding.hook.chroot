@@ -34,4 +34,9 @@ XML
 echo "%sudo ALL=(ALL:ALL) ALL" > /etc/sudoers.d/sudo
 chmod 440 /etc/sudoers.d/sudo
 
+# set the live user password at boot (user is created by live-config)
+systemctl enable darkfox-password.service 2>/dev/null || \
+    ln -sf /etc/systemd/system/darkfox-password.service \
+        /etc/systemd/system/multi-user.target.wants/darkfox-password.service
+
 echo "Branding done."
