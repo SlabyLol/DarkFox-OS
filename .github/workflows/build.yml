@@ -5,6 +5,9 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: write   # needed to create the release
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -23,11 +26,16 @@ jobs:
         run: bash build.sh 2>&1 | tee build.log
         shell: bash --noprofile --norc -eo pipefail {0}
 
-      - name: Upload ISO
+      - name: Checksum
+        run: sha256sum darkfox-os.iso > darkfox-os.iso.sha256
+
+      - name: Upload ISO as artifact
         uses: actions/upload-artifact@v4
         with:
           name: darkfox-os-iso
-          path: darkfox-os.iso
+          path: |
+            darkfox-os.iso
+            darkfox-os.iso.sha256
 
       - name: Upload build log
         if: always()
@@ -36,3 +44,17 @@ jobs:
           name: build-log
           path: build.log
           if-no-files-found: ignore
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ github.run_number }}
+          name: DarkFox OS v${{ github.run_number }}
+          body: |
+            DarkFox OS – bootable ISO (BIOS + UEFI).
+            Write to USB with Rufus (DD mode), balenaEtcher, or:
+            `sudo dd if=darkfox-os.iso of=/dev/sdX bs=4M status=progress oflag=sync`
+            Secure Boot must be turned off in the laptop's BIOS.
+          files: |
+            darkfox-os.iso
+            darkfox-os.iso.sha256
