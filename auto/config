@@ -1,0 +1,24 @@
+#!/bin/sh
+
+set -e
+
+lb config noauto \
+    --mode debian \
+    --distribution bookworm \
+    --architectures amd64 \
+    --binary-images iso-hybrid \
+    --bootloaders "syslinux,grub-efi" \
+    --debian-installer live \
+    --debian-installer-gui true \
+    --archive-areas "main contrib non-free non-free-firmware" \
+    --apt-indices false \
+    --apt-recommends true \
+    --firmware-binary true \
+    --firmware-chroot true \
+    --iso-application "DarkFox OS" \
+    --iso-publisher "DarkFox Co." \
+    --iso-volume "DarkFox_OS" \
+    --memtest none \
+    --win32-loader false \
+    --bootappend-live "boot=live components locales=de_DE.UTF-8 keyboard-layouts=de timezone=Europe/Berlin hostname=darkfox username=darkfox" \
+    "${@}"
