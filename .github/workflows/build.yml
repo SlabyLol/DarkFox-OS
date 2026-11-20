@@ -1,66 +1,31 @@
 name: Build DarkFox OS ISO
 
 on:
-  workflow_dispatch:
   push:
     branches: [main]
-    paths:
-      - 'auto/**'
-      - 'config/**'
-      - '.github/workflows/build.yml'
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    container:
+      image: debian:bookworm
+      options: --privileged
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: Install git
+        run: apt-get update && apt-get install -y git ca-certificates
 
-      - name: Free disk space
-        run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc || true
-          sudo apt-get clean
-          df -h
+      - uses: actions/checkout@v4
 
-      - name: Install live-build and dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y live-build debootstrap xorriso \
-            isolinux syslinux-common grub-pc-bin grub-efi-amd64-bin \
-            mtools dosfstools squashfs-tools cpio
+      - name: Build DarkFox OS
+        run: bash build.sh
 
-      - name: Make scripts executable
-        run: |
-          chmod +x auto/config
-          find config/hooks -type f -name "*.hook.*" -exec chmod +x {} \; || true
-
-      - name: Configure live-build
-        run: |
-          lb config
-
-      - name: Build ISO
-        run: |
-          sudo lb build 2>&1 | tee build.log
-
-      - name: Find and rename ISO
-        run: |
-          ISO=$(find . -maxdepth 1 -name "*.iso" -o -name "*.hybrid.iso" | head -1)
-          if [ -z "$ISO" ]; then
-            echo "No ISO found!"
-            ls -la
-            exit 1
-          fi
-          mv "$ISO" darkfox-os.iso
-          ls -lh darkfox-os.iso
-
-      - name: Upload ISO artifact
+      - name: Upload ISO
         uses: actions/upload-artifact@v4
         with:
           name: darkfox-os-iso
-          path: darkfox-os.iso
-          retention-days: 14
+          path: "*.iso"
 
       - name: Upload build log
         if: always()
@@ -68,4 +33,3 @@ jobs:
         with:
           name: build-log
           path: build.log
-          retention-days: 7
