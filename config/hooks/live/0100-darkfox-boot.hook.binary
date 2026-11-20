@@ -1,0 +1,37 @@
+#!/bin/sh
+# Hide the boot menu: boot DarkFox directly (BIOS + UEFI)
+echo "DarkFox: removing boot menu"
+
+# --- UEFI / GRUB ---
+if [ -f binary/boot/grub/grub.cfg ]; then
+    cat >> binary/boot/grub/grub.cfg << 'EOF'
+
+# DarkFox: no menu, boot first entry immediately
+set default=0
+set timeout=0
+set timeout_style=hidden
+EOF
+fi
+
+# --- BIOS / ISOLINUX ---
+if [ -f binary/isolinux/live.cfg ]; then
+    LINUX=$(grep -m1 -E '^[[:space:]]*linux[[:space:]]' binary/isolinux/live.cfg | awk '{print $2}')
+    INITRD=$(grep -m1 -E '^[[:space:]]*initrd[[:space:]]' binary/isolinux/live.cfg | awk '{print $2}')
+    APPEND=$(grep -m1 -E '^[[:space:]]*append[[:space:]]' binary/isolinux/live.cfg | sed -E 's/^[[:space:]]*append[[:space:]]+//')
+    if [ -n "$LINUX" ] && [ -n "$INITRD" ] && [ -n "$APPEND" ]; then
+        cat > binary/isolinux/isolinux.cfg << EOF
+default live
+prompt 0
+timeout 1
+
+label live
+    linux $LINUX
+    initrd $INITRD
+    append $APPEND
+EOF
+        echo "isolinux.cfg replaced"
+    else
+        echo "could not read live.cfg, isolinux menu left unchanged"
+    fi
+fi
+exit 0
