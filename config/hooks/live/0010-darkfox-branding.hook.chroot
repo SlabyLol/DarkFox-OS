@@ -1,36 +1,190 @@
 #!/bin/sh
 set -e
+export DEBIAN_FRONTEND=noninteractive
 
-echo "DarkFox OS Branding..."
-
+echo "=== DarkFox OS Branding ==="
 echo "darkfox" > /etc/hostname
 
-# Dark theme defaults for every new user (the live user is created from /etc/skel)
-mkdir -p /etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml
+XF=/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml
+mkdir -p "$XF" /etc/skel/.config/xfce4/terminal /etc/skel/.config/autostart \
+         /usr/share/backgrounds /usr/share/plymouth/themes/darkfox
 
-cat > /etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml << 'XML'
+# ------------------------------------------------------------------
+# 1. Images (generated here, so no binary files are needed in the repo)
+# ------------------------------------------------------------------
+F=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf
+P=/usr/share/plymouth/themes/darkfox
+convert -background none -font "$F" -pointsize 110 \
+    -fill '#e8eefc' label:"Dark" -fill '#ff7a1a' label:"Fox" -fill '#e8eefc' label:" OS" \
+    +append +repage "$P/logo.png" || echo "logo failed"
+convert -size 8x6 xc:'#ff7a1a' "$P/fill.png" || true
+convert -size 8x6 xc:'#2a3358' "$P/track.png" || true
+convert -size 1920x1080 gradient:'#0b0f1a-#1b2340' \
+    \( -background none -font "$F" -pointsize 260 -fill 'rgba(255,255,255,0.06)' label:"DarkFox" \) \
+    -gravity center -compose over -composite /usr/share/backgrounds/darkfox.png || echo "wallpaper failed"
+
+# ------------------------------------------------------------------
+# 2. Boot splash (Plymouth)
+# ------------------------------------------------------------------
+cat > "$P/darkfox.plymouth" << 'EOF'
+[Plymouth Theme]
+Name=DarkFox
+Description=DarkFox OS boot splash
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/darkfox
+ScriptFile=/usr/share/plymouth/themes/darkfox/darkfox.script
+EOF
+
+cat > "$P/darkfox.script" << 'EOF'
+Window.SetBackgroundTopColor(0.043, 0.059, 0.102);
+Window.SetBackgroundBottomColor(0.106, 0.145, 0.251);
+
+logo.image = Image("logo.png");
+logo.sprite = Sprite(logo.image);
+logo.sprite.SetX(Window.GetWidth() / 2 - logo.image.GetWidth() / 2);
+logo.sprite.SetY(Window.GetHeight() / 2 - logo.image.GetHeight() / 2 - 40);
+logo.sprite.SetZ(10);
+
+bar_w = Window.GetWidth() / 4;
+bar_h = 6;
+bar_x = Window.GetWidth() / 2 - bar_w / 2;
+bar_y = Window.GetHeight() / 2 + logo.image.GetHeight() / 2 + 20;
+
+track.image = Image("track.png").Scale(bar_w, bar_h);
+track.sprite = Sprite(track.image);
+track.sprite.SetPosition(bar_x, bar_y, 10);
+
+fill.src = Image("fill.png");
+fill.sprite = Sprite(fill.src.Scale(8, bar_h));
+fill.sprite.SetPosition(bar_x, bar_y, 11);
+
+fun progress_callback(duration, progress) {
+    w = Math.Int(bar_w * progress);
+    if (w < 8) w = 8;
+    fill.sprite.SetImage(fill.src.Scale(w, bar_h));
+}
+Plymouth.SetBootProgressFunction(progress_callback);
+
+counter = 0;
+fun refresh_callback() {
+    counter = counter + 1;
+    logo.sprite.SetOpacity(0.7 + 0.3 * Math.Sin(counter / 15));
+}
+Plymouth.SetRefreshFunction(refresh_callback);
+EOF
+
+plymouth-set-default-theme darkfox || echo "plymouth theme not set"
+
+# ------------------------------------------------------------------
+# 3. Login screen + autologin
+# ------------------------------------------------------------------
+mkdir -p /etc/lightdm/lightdm.conf.d
+cat > /etc/lightdm/lightdm.conf.d/50-darkfox-autologin.conf << 'EOF'
+[Seat:*]
+autologin-user=darkfox
+autologin-user-timeout=0
+autologin-session=xfce
+EOF
+
+cat > /etc/lightdm/lightdm-gtk-greeter.conf << 'EOF'
+[greeter]
+background=/usr/share/backgrounds/darkfox.png
+theme-name=Arc-Dark
+icon-theme-name=Papirus-Dark
+font-name=Noto Sans 11
+EOF
+
+# ------------------------------------------------------------------
+# 4. XFCE defaults (copied into the home of the user created below)
+# ------------------------------------------------------------------
+cat > "$XF/xsettings.xml" << 'EOF'
 <?xml version="1.0" encoding="UTF-8"?>
 <channel name="xsettings" version="1.0">
   <property name="Net" type="empty">
     <property name="ThemeName" type="string" value="Arc-Dark"/>
     <property name="IconThemeName" type="string" value="Papirus-Dark"/>
+    <property name="EnableEventSounds" type="bool" value="true"/>
+    <property name="EnableInputFeedbackSounds" type="bool" value="true"/>
+    <property name="SoundThemeName" type="string" value="freedesktop"/>
   </property>
   <property name="Gtk" type="empty">
     <property name="FontName" type="string" value="Noto Sans 10"/>
+    <property name="MonospaceFontName" type="string" value="Fira Code 11"/>
   </property>
 </channel>
-XML
+EOF
 
-cat > /etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfwm4.xml << 'XML'
+cat > "$XF/xfwm4.xml" << 'EOF'
 <?xml version="1.0" encoding="UTF-8"?>
 <channel name="xfwm4" version="1.0">
   <property name="general" type="empty">
     <property name="theme" type="string" value="Arc-Dark"/>
   </property>
 </channel>
-XML
+EOF
 
-# Create the live user at build time (login must not depend on live-config)
+{
+echo '<?xml version="1.0" encoding="UTF-8"?>'
+echo '<channel name="xfce4-desktop" version="1.0">'
+echo '  <property name="backdrop" type="empty">'
+echo '    <property name="screen0" type="empty">'
+for m in monitor0 monitoreDP-1 monitorLVDS-1 monitorVGA-1 monitorHDMI-1; do
+    echo "      <property name=\"$m\" type=\"empty\">"
+    echo '        <property name="workspace0" type="empty">'
+    echo '          <property name="color-style" type="int" value="0"/>'
+    echo '          <property name="image-style" type="int" value="5"/>'
+    echo '          <property name="last-image" type="string" value="/usr/share/backgrounds/darkfox.png"/>'
+    echo '        </property>'
+    echo '      </property>'
+done
+echo '    </property>'
+echo '  </property>'
+echo '</channel>'
+} > "$XF/xfce4-desktop.xml"
+
+cat > /etc/skel/.config/xfce4/terminal/terminalrc << 'EOF'
+[Configuration]
+FontName=Fira Code 11
+MiscAlwaysShowTabs=FALSE
+ScrollingBar=TERMINAL_SCROLLBAR_NONE
+ColorForeground=#e8eefc
+ColorBackground=#0b0f1a
+ColorCursor=#ff7a1a
+ColorPalette=#1b2340;#ff5c57;#5af78e;#f3f99d;#57c7ff;#ff6ac1;#9aedfe;#e8eefc;#686868;#ff5c57;#5af78e;#f3f99d;#57c7ff;#ff6ac1;#9aedfe;#ffffff
+BackgroundMode=TERMINAL_BACKGROUND_TRANSPARENT
+BackgroundDarkness=0.95
+EOF
+
+# startup sound + unmute (autostart for every user)
+cat > /etc/xdg/autostart/darkfox-startup-sound.desktop << 'EOF'
+[Desktop Entry]
+Type=Application
+Name=DarkFox Startup Sound
+Exec=sh -c "amixer -q sset Master unmute 2>/dev/null; amixer -q sset Master 70%% 2>/dev/null; paplay /usr/share/sounds/freedesktop/stereo/desktop-login.oga || paplay /usr/share/sounds/freedesktop/stereo/service-login.oga"
+Terminal=false
+X-GNOME-Autostart-Delay=2
+EOF
+
+# comfortable shell for programming
+cat >> /etc/skel/.bashrc << 'EOF'
+
+# ---- DarkFox ----
+export EDITOR=nano
+alias ll='ls -lah --color=auto'
+alias gs='git status'
+alias gl='git log --oneline --graph --decorate -20'
+alias fd='fdfind'
+[ -f /usr/lib/git-core/git-sh-prompt ] && . /usr/lib/git-core/git-sh-prompt
+PS1='\[\e[38;5;208m\]\u@darkfox\[\e[0m\] \[\e[36m\]\w\[\e[0m\]$(__git_ps1 " (%s)")\n\$ '
+EOF
+
+git config --system init.defaultBranch main || true
+
+# ------------------------------------------------------------------
+# 5. Live user (created at build time, login does not depend on live-config)
+# ------------------------------------------------------------------
 if ! id darkfox >/dev/null 2>&1; then
     useradd -m -s /bin/bash darkfox
 fi
@@ -38,20 +192,192 @@ for g in sudo audio video cdrom plugdev netdev dip lpadmin scanner bluetooth fus
     if getent group "$g" >/dev/null 2>&1; then usermod -aG "$g" darkfox; fi
 done
 echo "darkfox:live" | chpasswd
-# root password too, so there is always a way in on a text console (Ctrl+Alt+F2)
-echo "root:live" | chpasswd
+echo "root:live" | chpasswd     # emergency: Ctrl+Alt+F2
 
-# sudo for the live user (no password, needed by the setup helper)
 echo "%sudo ALL=(ALL:ALL) ALL" > /etc/sudoers.d/sudo
 echo "darkfox ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/darkfox
 chmod 440 /etc/sudoers.d/sudo /etc/sudoers.d/darkfox
 
-# make the setup helpers executable
-chmod +x /usr/local/bin/darkfox-setup /usr/local/bin/darkfox-create-persistence
+# ------------------------------------------------------------------
+# 6. VS Code (official Microsoft package; build continues if download fails)
+# ------------------------------------------------------------------
+(
+    echo "code code/add-microsoft-repo boolean false" | debconf-set-selections
+    curl -fL --retry 3 -o /tmp/code.deb "https://update.code.visualstudio.com/latest/linux-deb-x64/stable" &&
+    apt-get install -y --no-install-recommends /tmp/code.deb &&
+    rm -f /tmp/code.deb /etc/apt/sources.list.d/vscode.* /etc/apt/trusted.gpg.d/microsoft.*
+) || echo "VS Code install skipped"
 
-# set the live user password at boot (user is created by live-config)
+# ------------------------------------------------------------------
+# 7. Helper scripts
+# ------------------------------------------------------------------
+cat > /usr/local/bin/darkfox-create-persistence << 'EOF'
+#!/bin/bash
+# Creates a "persistence" partition in the free space of the USB stick
+# DarkFox was booted from, so files and settings are kept between boots.
+LOG=/tmp/darkfox-persistence.log
+exec > >(tee "$LOG") 2>&1
+fail() { echo "FEHLER: $*"; exit 1; }
+
+[ "$(id -u)" -eq 0 ] || fail "root needed"
+
+if blkid -L persistence >/dev/null 2>&1; then
+    echo "persistence partition already exists"; exit 0
+fi
+
+SRC=$(findmnt -n -o SOURCE /run/live/medium 2>/dev/null)
+[ -n "$SRC" ] || fail "Boot-Medium nicht gefunden (/run/live/medium)"
+
+PK=$(lsblk -no PKNAME "$SRC" 2>/dev/null | head -n1)
+if [ -n "$PK" ]; then DISK="/dev/$PK"; else DISK="$SRC"; fi
+[ -b "$DISK" ] || fail "Datentraeger $DISK nicht gefunden"
+echo "Boot disk: $DISK ($(blkid -p -s PTTYPE -o value "$DISK" 2>/dev/null))"
+
+BEFORE=$(lsblk -lnpo NAME "$DISK" | sort)
+
+case "$(blkid -p -s PTTYPE -o value "$DISK" 2>/dev/null)" in
+    gpt)
+        sgdisk -e "$DISK" || fail "sgdisk -e"
+        sgdisk -n 0:0:0 -t 0:8300 -c 0:persistence "$DISK" || fail "sgdisk: kein freier Platz auf dem Stick?"
+        ;;
+    *)
+        echo ',,L' | sfdisk --append --no-reread "$DISK" || fail "sfdisk: kein freier Platz auf dem Stick?"
+        ;;
+esac
+
+partprobe "$DISK" 2>/dev/null || partx -a "$DISK" 2>/dev/null || true
+udevadm settle 2>/dev/null || true
+sleep 3
+
+NEW=$(comm -13 <(echo "$BEFORE") <(lsblk -lnpo NAME "$DISK" | sort) | head -n1)
+[ -b "$NEW" ] || fail "neue Partition nicht gefunden"
+echo "Neue Partition: $NEW"
+
+mkfs.ext4 -F -L persistence "$NEW" || fail "mkfs.ext4"
+
+MNT=$(mktemp -d)
+mount "$NEW" "$MNT" || fail "mount"
+echo "/ union" > "$MNT/persistence.conf"
+sync
+umount "$MNT"
+rmdir "$MNT"
+echo "Fertig."
+EOF
+
+cat > /usr/local/bin/darkfox-setup << 'EOF'
+#!/bin/bash
+# DarkFox OS first-time setup:
+#  1. create storage on the USB stick (persistence) -> reboot
+#  2. choose a password for the user
+MARK="$HOME/.config/darkfox-setup-done"
+[ -e "$MARK" ] && exit 0
+sleep 4
+
+persistence_active() { ls -d /run/live/persistence/* >/dev/null 2>&1; }
+
+if ! persistence_active; then
+    zenity --question --title="DarkFox OS Einrichtung" --width=440 \
+        --ok-label="Jetzt einrichten" --cancel-label="Später" \
+        --text="Willkommen bei DarkFox OS!\n\nDamit deine Dateien und Einstellungen auf dem USB-Stick gespeichert bleiben, wird einmalig Speicherplatz auf dem Stick angelegt.\n\nDer Laptop startet danach neu.\nDen Stick dabei bitte nicht abziehen." \
+        || exit 0
+
+    zenity --info --no-wrap --title="DarkFox OS" \
+        --text="Speicher wird angelegt, bitte warten ...\nStick nicht abziehen!" &
+    DLG=$!
+    sudo /usr/local/bin/darkfox-create-persistence >/dev/null 2>&1
+    kill "$DLG" 2>/dev/null
+
+    if blkid -L persistence >/dev/null 2>&1; then
+        zenity --info --title="DarkFox OS" --width=380 \
+            --text="Fertig! Der Laptop startet jetzt neu.\nStick bitte stecken lassen."
+        sudo systemctl reboot
+    else
+        zenity --error --title="DarkFox OS" --width=480 \
+            --text="Der Speicher konnte nicht angelegt werden.\n\n$(tail -n 8 /tmp/darkfox-persistence.log 2>/dev/null)"
+    fi
+    exit 0
+fi
+
+while true; do
+    OUT=$(zenity --forms --title="DarkFox OS Einrichtung" --width=440 \
+        --text="Wähle ein Passwort für den Benutzer 'darkfox'." \
+        --add-password="Neues Passwort" --add-password="Passwort wiederholen" \
+        --separator=$'\n') || exit 0
+    PW1=$(echo "$OUT" | sed -n 1p)
+    PW2=$(echo "$OUT" | sed -n 2p)
+    if [ "${#PW1}" -lt 4 ]; then
+        zenity --error --text="Das Passwort muss mindestens 4 Zeichen haben."
+    elif [ "$PW1" != "$PW2" ]; then
+        zenity --error --text="Die Passwörter sind nicht gleich."
+    else
+        break
+    fi
+done
+
+echo "$USER:$PW1" | sudo chpasswd
+mkdir -p "$HOME/.config"
+touch "$MARK"
+zenity --info --title="DarkFox OS" --text="Einrichtung abgeschlossen.\nDeine Dateien bleiben jetzt auf dem Stick."
+EOF
+
+cat > /usr/local/bin/darkfox-netcheck << 'EOF'
+#!/bin/bash
+# Shows network status (useful when WiFi / internet does not work)
+{
+    echo "== Geraete (nmcli) =="; nmcli device status
+    echo; echo "== WLAN-Netze =="; nmcli -f SSID,SIGNAL,SECURITY device wifi list 2>&1 | head -n 12
+    echo; echo "== rfkill =="; rfkill list
+    echo; echo "== Netzwerkkarten (PCI) =="; lspci -nnk | grep -iA3 -E 'network|ethernet'
+    echo; echo "== USB =="; lsusb
+    echo; echo "== Firmware / Treiber Meldungen =="; sudo dmesg | grep -iE 'firmware|iwlwifi|ath[0-9k]|rtl|brcm|wlan' | tail -n 15
+    echo; echo "== Dienste =="; systemctl is-active NetworkManager wpa_supplicant
+} 2>&1 | zenity --text-info --width=760 --height=520 --title="DarkFox Netzwerk-Check"
+EOF
+
+cat > /usr/share/applications/darkfox-netcheck.desktop << 'EOF'
+[Desktop Entry]
+Type=Application
+Name=DarkFox Netzwerk-Check
+Comment=Zeigt, warum das Internet nicht geht
+Exec=/usr/local/bin/darkfox-netcheck
+Icon=network-wired
+Categories=System;Network;
+Terminal=false
+EOF
+
+cat > /etc/xdg/autostart/darkfox-setup.desktop << 'EOF'
+[Desktop Entry]
+Type=Application
+Name=DarkFox Setup
+Exec=/usr/local/bin/darkfox-setup
+Terminal=false
+X-GNOME-Autostart-Delay=3
+EOF
+
+cat > /etc/systemd/system/darkfox-password.service << 'EOF'
+[Unit]
+Description=Set default DarkFox user password (until first-time setup is done)
+After=live-config.service
+Before=display-manager.service
+ConditionPathExists=!/home/darkfox/.config/darkfox-setup-done
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c 'echo darkfox:live | chpasswd || true'
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+chmod +x /usr/local/bin/darkfox-create-persistence /usr/local/bin/darkfox-setup /usr/local/bin/darkfox-netcheck
 systemctl enable darkfox-password.service 2>/dev/null || \
     ln -sf /etc/systemd/system/darkfox-password.service \
         /etc/systemd/system/multi-user.target.wants/darkfox-password.service
+systemctl enable NetworkManager 2>/dev/null || true
 
-echo "Branding done."
+# ------------------------------------------------------------------
+# 8. Rebuild initramfs so the boot splash is included
+# ------------------------------------------------------------------
+update-initramfs -u -k all || echo "initramfs update failed"
+
+echo "=== Branding done ==="
