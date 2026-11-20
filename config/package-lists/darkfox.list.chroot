@@ -1,32 +1,38 @@
 # Desktop
 task-xfce-desktop
-xfce4
-xfce4-goodies
 xfce4-terminal
+xfce4-goodies
 thunar
+mousepad
+lightdm
 
-# Dark Theme / Looks
+# Dark theme / looks
 arc-theme
-arc-icon-theme
-grepia-icon-theme
-adwaita-icon-theme
+papirus-icon-theme
 gtk2-engines-murrine
 gtk2-engines-pixbuf
+fonts-noto
+fonts-liberation
 
-# Network & Firmware
+# Network & WiFi firmware (Intel / Realtek / Atheros / Broadcom)
 network-manager
 network-manager-gnome
 firmware-linux
 firmware-linux-nonfree
+firmware-misc-nonfree
 firmware-realtek
 firmware-iwlwifi
 firmware-atheros
+firmware-brcm80211
+firmware-amd-graphics
 
-# Browser & Apps
+# Browser
 firefox-esr
-libreoffice
-gimp
-vlc
+firefox-esr-l10n-de
+
+# Audio
+pulseaudio
+pavucontrol
 
 # Tools
 gparted
@@ -38,18 +44,10 @@ git
 vim
 nano
 sudo
+locales
+console-setup
+keyboard-configuration
 
-# Live / Installer
-live-boot
-live-config
-live-tools
-user-setup
-sudo
+# Installer (install to hard drive)
 calamares
 calamares-settings-debian
-
-# Extra
-pulseaudio
-pavucontrol
-fonts-noto
-fonts-liberation
