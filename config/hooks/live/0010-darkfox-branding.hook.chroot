@@ -30,9 +30,13 @@ cat > /etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfwm4.xml << 'XML'
 </channel>
 XML
 
-# sudo for the live user
+# sudo for the live user (no password, needed by the setup helper)
 echo "%sudo ALL=(ALL:ALL) ALL" > /etc/sudoers.d/sudo
-chmod 440 /etc/sudoers.d/sudo
+echo "darkfox ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/darkfox
+chmod 440 /etc/sudoers.d/sudo /etc/sudoers.d/darkfox
+
+# make the setup helpers executable
+chmod +x /usr/local/bin/darkfox-setup /usr/local/bin/darkfox-create-persistence
 
 # set the live user password at boot (user is created by live-config)
 systemctl enable darkfox-password.service 2>/dev/null || \
