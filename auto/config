@@ -19,5 +19,5 @@ lb config noauto \
     --iso-volume "DarkFox_OS" \
     --memtest none \
     --win32-loader false \
-    --bootappend-live "boot=live components quiet splash locales=de_DE.UTF-8 keyboard-layouts=de timezone=Europe/Berlin hostname=darkfox username=darkfox" \
+    --bootappend-live "boot=live components persistence quiet splash locales=de_DE.UTF-8 keyboard-layouts=de timezone=Europe/Berlin hostname=darkfox username=darkfox" \
     "${@}"
