@@ -19,7 +19,7 @@ apt-get install -y --no-install-recommends \
     wget ca-certificates xz-utils bzip2 gzip cpio tar \
     build-essential bc flex bison libssl-dev libelf-dev libncurses-dev \
     perl python3 rsync kmod \
-    xorriso isolinux syslinux-common
+    xorriso mtools dosfstools grub-common grub-pc-bin grub-efi-amd64-bin
 
 rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR" "$ISO_DIR" "$ROOTFS_DIR"/{bin,sbin,etc,proc,sys,dev,usr/bin,usr/sbin,tmp,root}
@@ -115,37 +115,52 @@ scripts/config --enable CONFIG_SERIAL_8250_CONSOLE
 scripts/config --enable CONFIG_TTY
 scripts/config --enable CONFIG_VT
 scripts/config --enable CONFIG_VT_CONSOLE
+# UEFI boot + graphics console on laptops
+scripts/config --enable CONFIG_EFI
+scripts/config --enable CONFIG_EFI_STUB
+scripts/config --enable CONFIG_FB
+scripts/config --enable CONFIG_FB_EFI
+scripts/config --enable CONFIG_FB_SIMPLE
+scripts/config --enable CONFIG_SYSFB_SIMPLEFB
+scripts/config --enable CONFIG_DRM
+scripts/config --enable CONFIG_DRM_SIMPLEDRM
+scripts/config --enable CONFIG_FRAMEBUFFER_CONSOLE
+# Keyboards: PS/2 laptop keyboards + USB keyboards
+scripts/config --enable CONFIG_INPUT_KEYBOARD
+scripts/config --enable CONFIG_KEYBOARD_ATKBD
+scripts/config --enable CONFIG_SERIO_I8042
+scripts/config --enable CONFIG_HID
+scripts/config --enable CONFIG_HID_GENERIC
+scripts/config --enable CONFIG_USB_HID
+scripts/config --enable CONFIG_USB_XHCI_HCD
+scripts/config --enable CONFIG_USB_EHCI_HCD
 make olddefconfig
 make -j"$(nproc)" bzImage
 cp arch/x86/boot/bzImage "$ISO_DIR/kernel.gz"
 cd "$BUILD_DIR"
 
-echo "=== Preparing Syslinux ==="
-cp /usr/lib/ISOLINUX/isolinux.bin              "$ISO_DIR/"
-cp /usr/lib/syslinux/modules/bios/ldlinux.c32  "$ISO_DIR/"
+echo "=== Preparing GRUB (BIOS + UEFI) ==="
+mkdir -p "$ISO_DIR/boot/grub"
+mv "$ISO_DIR/kernel.gz" "$ISO_DIR/boot/kernel"
+mv "$ISO_DIR/rootfs.gz" "$ISO_DIR/boot/rootfs.gz"
 
-cat > "$ISO_DIR/isolinux.cfg" << 'EOF'
-DEFAULT darkfox
-PROMPT 0
-TIMEOUT 30
+cat > "$ISO_DIR/boot/grub/grub.cfg" << 'EOF'
+set default=0
+set timeout=3
 
-LABEL darkfox
-    KERNEL kernel.gz
-    APPEND initrd=rootfs.gz console=tty0
+menuentry "DarkFox OS" {
+    linux /boot/kernel console=tty0
+    initrd /boot/rootfs.gz
+}
+
+menuentry "DarkFox OS (safe graphics: nomodeset)" {
+    linux /boot/kernel console=tty0 nomodeset
+    initrd /boot/rootfs.gz
+}
 EOF
 
-echo "=== Creating ISO ==="
-cd "$ISO_DIR"
-xorriso -as mkisofs \
-  -o "$WORKDIR/darkfox-os.iso" \
-  -isohybrid-mbr /usr/lib/ISOLINUX/isohdpfx.bin \
-  -b isolinux.bin \
-  -c boot.cat \
-  -no-emul-boot \
-  -boot-load-size 4 \
-  -boot-info-table \
-  -V "DARKFOX_OS" \
-  .
+echo "=== Creating hybrid ISO (BIOS + UEFI, USB-bootable) ==="
+grub-mkrescue -o "$WORKDIR/darkfox-os.iso" "$ISO_DIR" -volid "DARKFOX_OS"
 
 echo ""
 echo "=== Fertig ==="
