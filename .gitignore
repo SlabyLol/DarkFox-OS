@@ -1,10 +1,11 @@
 build/
+chroot/
+binary/
+cache/
+.tmp/
 *.iso
 *.img
-*.cpio
-*.gz
-linux-*
-busybox-*
-syslinux-*
-*.tar.*
+*.hybrid.iso
+*.log
+.build/
 .DS_Store
