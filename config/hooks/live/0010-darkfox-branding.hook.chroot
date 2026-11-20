@@ -1,0 +1,49 @@
+#!/bin/sh
+
+set -e
+
+echo "DarkFox OS Branding..."
+
+# Hostname
+echo "darkfox" > /etc/hostname
+echo "127.0.0.1 darkfox" >> /etc/hosts
+
+# Motd
+cat > /etc/motd << 'EOF'
+
+  ██████╗  █████╗ ██████╗ ██╗  ██╗███████╗ ██████╗ ██╗  ██╗
+  ██╔══██╗██╔══██╗██╔══██╗██║ ██╔╝██╔════╝██╔═══██╗╚██╗██╔╝
+  ██║  ██║███████║██████╔╝█████╔╝ █████╗  ██║   ██║ ╚███╔╝ 
+  ██║  ██║██╔══██║██╔══██╗██╔═██╗ ██╔══╝  ██║   ██║ ██╔██╗ 
+  ██████╔╝██║  ██║██║  ██║██║  ██╗██║     ╚██████╔╝██╔╝ ██╗
+  ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝      ╚═════╝ ╚═╝  ╚═╝
+
+          DarkFox OS  –  by DarkFox Co.
+
+EOF
+
+# Simple XFCE dark preference (if possible)
+mkdir -p /etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml
+
+# Create user preference skeleton
+cat > /etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml << 'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<channel name="xsettings" version="1.0">
+  <property name="Net" type="empty">
+    <property name="ThemeName" type="string" value="Arc-Dark"/>
+    <property name="IconThemeName" type="string" value="Arc"/>
+  </property>
+  <property name="Gtk" type="empty">
+    <property name="FontName" type="string" value="Noto Sans 10"/>
+  </property>
+</channel>
+EOF
+
+# Ensure sudo works for live user
+echo "%sudo ALL=(ALL:ALL) ALL" > /etc/sudoers.d/sudo
+chmod 440 /etc/sudoers.d/sudo
+
+# Clean a bit
+rm -rf /usr/share/doc/* /usr/share/man/* 2>/dev/null || true
+
+echo "Branding done."
