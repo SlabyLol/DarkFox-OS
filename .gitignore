@@ -1,0 +1,10 @@
+build/
+*.iso
+*.img
+*.cpio
+*.gz
+linux-*
+busybox-*
+syslinux-*
+*.tar.*
+.DS_Store
