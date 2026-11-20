@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=DarkFox Setup
+Comment=First-time setup
+Exec=/usr/local/bin/darkfox-setup
+Terminal=false
+X-GNOME-Autostart-Delay=3
