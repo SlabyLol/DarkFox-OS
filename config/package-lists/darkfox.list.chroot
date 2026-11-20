@@ -1,0 +1,55 @@
+# Desktop
+task-xfce-desktop
+xfce4
+xfce4-goodies
+xfce4-terminal
+thunar
+
+# Dark Theme / Looks
+arc-theme
+arc-icon-theme
+grepia-icon-theme
+adwaita-icon-theme
+gtk2-engines-murrine
+gtk2-engines-pixbuf
+
+# Network & Firmware
+network-manager
+network-manager-gnome
+firmware-linux
+firmware-linux-nonfree
+firmware-realtek
+firmware-iwlwifi
+firmware-atheros
+
+# Browser & Apps
+firefox-esr
+libreoffice
+gimp
+vlc
+
+# Tools
+gparted
+htop
+neofetch
+curl
+wget
+git
+vim
+nano
+sudo
+
+# Live / Installer
+live-boot
+live-config
+live-tools
+user-setup
+sudo
+calamares
+calamares-settings-debian
+
+# Extra
+pulseaudio
+pavucontrol
+fonts-noto
+fonts-liberation
