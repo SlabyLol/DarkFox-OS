@@ -26,6 +26,11 @@ firmware-atheros
 firmware-brcm80211
 firmware-amd-graphics
 
+# Broadcom b43 (ucode29_mimo.fw etc.) – must download+extract at build time
+firmware-b43-installer
+firmware-b43legacy-installer
+b43-fwcutter
+
 # Browser
 firefox-esr
 firefox-esr-l10n-de
