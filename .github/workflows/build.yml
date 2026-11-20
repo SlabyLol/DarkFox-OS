@@ -8,24 +8,26 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     container:
       image: debian:bookworm
       options: --privileged
 
     steps:
       - name: Install git
-        run: apt-get update && apt-get install -y git ca-certificates
+        run: apt-get update && apt-get install -y --no-install-recommends git ca-certificates
 
       - uses: actions/checkout@v4
 
       - name: Build DarkFox OS
-        run: bash build.sh
+        run: bash build.sh 2>&1 | tee build.log
+        shell: bash --noprofile --norc -eo pipefail {0}
 
       - name: Upload ISO
         uses: actions/upload-artifact@v4
         with:
           name: darkfox-os-iso
-          path: "*.iso"
+          path: darkfox-os.iso
 
       - name: Upload build log
         if: always()
@@ -33,3 +35,4 @@ jobs:
         with:
           name: build-log
           path: build.log
+          if-no-files-found: ignore
