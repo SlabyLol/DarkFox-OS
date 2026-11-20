@@ -1,9 +1,7 @@
 name: Build DarkFox OS ISO
 
 on:
-  push:
-    branches: [main]
-  workflow_dispatch:
+  workflow_dispatch:   # manual only: Actions -> Build DarkFox OS ISO -> Run workflow
 
 permissions:
   contents: write   # needed to create the release
@@ -11,20 +9,22 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
-    container:
-      image: debian:bookworm
-      options: --privileged
+    timeout-minutes: 150
 
     steps:
-      - name: Install git
-        run: apt-get update && apt-get install -y --no-install-recommends git ca-certificates
-
       - uses: actions/checkout@v4
 
-      - name: Build DarkFox OS
-        run: bash build.sh 2>&1 | tee build.log
-        shell: bash --noprofile --norc -eo pipefail {0}
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          sudo docker image prune --all --force || true
+          df -h /
+
+      - name: Build ISO (Debian bookworm container)
+        shell: bash
+        run: |
+          docker run --rm --privileged -v "$PWD":/work -w /work \
+            debian:bookworm bash build.sh 2>&1 | tee build.log
 
       - name: Checksum
         run: sha256sum darkfox-os.iso > darkfox-os.iso.sha256
@@ -36,6 +36,18 @@ jobs:
           path: |
             darkfox-os.iso
             darkfox-os.iso.sha256
+
+      - name: Prepare release files (GitHub allows max 2 GiB per file)
+        run: |
+          mkdir release
+          size=$(stat -c%s darkfox-os.iso)
+          echo "ISO size: $size bytes"
+          if [ "$size" -ge 2000000000 ]; then
+            split -b 1900M -d darkfox-os.iso release/darkfox-os.iso.part
+          else
+            mv darkfox-os.iso release/
+          fi
+          cp darkfox-os.iso.sha256 release/
 
       - name: Upload build log
         if: always()
@@ -51,10 +63,15 @@ jobs:
           tag_name: v${{ github.run_number }}
           name: DarkFox OS v${{ github.run_number }}
           body: |
-            DarkFox OS – bootable ISO (BIOS + UEFI).
+            DarkFox OS - XFCE live system, bootable on BIOS and UEFI.
+
+            **Login:** user `darkfox`, password `live` (autologin in live mode).
+            **Secure Boot must be turned off** in the laptop BIOS.
+
             Write to USB with Rufus (DD mode), balenaEtcher, or:
             `sudo dd if=darkfox-os.iso of=/dev/sdX bs=4M status=progress oflag=sync`
-            Secure Boot must be turned off in the laptop's BIOS.
-          files: |
-            darkfox-os.iso
-            darkfox-os.iso.sha256
+
+            If the ISO was split into `darkfox-os.iso.part00`, `.part01`, join the parts first:
+            Linux: `cat darkfox-os.iso.part* > darkfox-os.iso`
+            Windows: `copy /b darkfox-os.iso.part00+darkfox-os.iso.part01 darkfox-os.iso`
+          files: release/*
