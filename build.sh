@@ -21,7 +21,63 @@ chmod +x auto/* config/hooks/live/* 2>/dev/null || true
 
 lb clean || true
 lb config
-lb build
+lb bootstrap
+lb chroot
+
+# ------------------------------------------------------------------
+# Boot without a menu (BIOS + UEFI).
+# The real kernel file names are only known now, so the bootloader
+# configs are generated here and copied over the defaults by
+# live-build (config/includes.binary is applied after the bootloaders).
+# ------------------------------------------------------------------
+KERNEL=$(ls chroot/boot/vmlinuz-* | sort -V | tail -n1)
+KVER=${KERNEL##*/vmlinuz-}
+[ -e "chroot/boot/initrd.img-$KVER" ] || { echo "initrd for $KVER not found" >&2; exit 1; }
+APPEND=$( . ./config/binary; printf '%s' "$LB_BOOTAPPEND_LIVE" )
+[ -n "$APPEND" ] || { echo "LB_BOOTAPPEND_LIVE is empty" >&2; exit 1; }
+echo "Kernel: $KVER"
+echo "Boot options: $APPEND"
+
+rm -rf config/includes.binary
+mkdir -p config/includes.binary/isolinux config/includes.binary/boot/grub
+
+# BIOS (syslinux): no menu; hold Shift at start and type "safe" for safe graphics
+cat > config/includes.binary/isolinux/isolinux.cfg << CFG
+default live
+prompt 0
+timeout 1
+
+label live
+    linux /live/vmlinuz-$KVER
+    initrd /live/initrd.img-$KVER
+    append $APPEND
+
+label safe
+    linux /live/vmlinuz-$KVER
+    initrd /live/initrd.img-$KVER
+    append $APPEND nomodeset
+CFG
+
+# UEFI (GRUB): boots after 1 second without a menu; press Esc for the menu
+cat > config/includes.binary/boot/grub/grub.cfg << CFG
+set default=0
+set timeout=1
+set timeout_style=hidden
+search --no-floppy --set=root --file /live/filesystem.squashfs
+set gfxpayload=keep
+
+menuentry "DarkFox OS" {
+    linux /live/vmlinuz-$KVER $APPEND
+    initrd /live/initrd.img-$KVER
+}
+
+menuentry "DarkFox OS (safe graphics)" {
+    linux /live/vmlinuz-$KVER $APPEND nomodeset
+    initrd /live/initrd.img-$KVER
+}
+CFG
+
+lb binary
 
 mv live-image-*.iso darkfox-os.iso
 ls -lh darkfox-os.iso
