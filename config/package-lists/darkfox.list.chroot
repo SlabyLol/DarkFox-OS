@@ -43,6 +43,8 @@ pavucontrol
 alsa-utils
 sound-theme-freedesktop
 mpv
+vlc
+audacity
 
 # ---------- Network / WiFi ----------
 network-manager
@@ -129,10 +131,56 @@ zip
 unzip
 p7zip-full
 neofetch
+autoconf
+automake
+libtool
+bison
+flex
+cppcheck
+gdbserver
+python3-numpy
+python3-pandas
+python3-matplotlib
+python3-requests
+python3-flask
+php-cli
+ruby
+lua5.4
+docker.io
+podman
+postgresql-client
+sqlitebrowser
+nmap
+netcat-openbsd
+tcpdump
+traceroute
+
+# ---------- Office / Creative ----------
+libreoffice-writer
+libreoffice-calc
+libreoffice-impress
+libreoffice-gtk3
+libreoffice-l10n-de
+hunspell-de-de
+gimp
+keepassxc
+transmission-gtk
+evince
+gnome-calculator
+
+# ---------- Games ----------
+chocolate-doom
+freedoom
+supertux
+bsdgames
 
 # ---------- Browser ----------
 firefox-esr
 firefox-esr-l10n-de
+
+# ---------- Mac / phones ----------
+lm-sensors
+usbmuxd
 
 # ---------- System / Disk ----------
 sudo
