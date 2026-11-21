@@ -366,76 +366,64 @@ EOF
 
 cat > /usr/local/bin/darkfox-netcheck << 'EOF'
 #!/bin/bash
-# Shows network status (useful when WiFi / internet does not work)
+# Network check: collects diagnostics, saves them as a log file and lets you
+# copy that file to a USB stick (to send it to someone for help).
 export PATH="$PATH:/usr/sbin:/sbin"
+LOG="$HOME/darkfox-netcheck.log"
+
 {
-    echo "== Geraete (nmcli) =="; nmcli device status
+    echo "DarkFox Netzwerk-Check - $(date)"
+    echo "Kernel: $(uname -r)"
+    echo; echo "== Geraete (nmcli) =="; nmcli device status
+    echo; echo "== IP-Adressen =="; ip -br addr
     echo; echo "== WLAN-Netze =="; nmcli -f SSID,SIGNAL,SECURITY device wifi list 2>&1 | head -n 12
     echo; echo "== rfkill =="; rfkill list
     echo; echo "== Netzwerkkarten (PCI) =="; lspci -nnk | grep -iA3 -E 'network|ethernet'
     echo; echo "== USB =="; lsusb
-    echo; echo "== Firmware / Treiber Meldungen =="; sudo -n dmesg | grep -iE 'firmware|iwlwifi|ath[0-9k]|rtl|brcm|wlan' | tail -n 15
+    echo; echo "== Geladene WLAN-Module =="; lsmod | grep -E '^(wl|b43|bcma|ssb|brcm|iwl|ath|rtl)' || echo 'keine'
+    echo; echo "== DKMS =="; dkms status 2>&1
+    echo; echo "== Modul wl vorhanden? =="; modinfo wl 2>&1 | head -n 5
+    echo; echo "== Treiber/Firmware-Meldungen (dmesg) =="
+    sudo -n dmesg 2>&1 | grep -iE 'firmware|iwlwifi|ath[0-9k]|rtl|brcm|b43|bcma|wlan|wl:' | tail -n 30
+    echo; echo "== NetworkManager Log =="; sudo -n journalctl -u NetworkManager -b --no-pager 2>&1 | tail -n 25
     echo; echo "== Dienste =="; systemctl is-active NetworkManager wpa_supplicant
-    echo; echo "== WLAN-Treiber (wl/b43) =="; lsmod | grep -E '^(wl|b43|brcm)' || echo 'kein WLAN-Treiber geladen'
-} 2>&1 | zenity --text-info --width=760 --height=520 --title="DarkFox Netzwerk-Check"
+} > "$LOG" 2>&1
+
+DESK=$(xdg-user-dir DESKTOP 2>/dev/null)
+[ -d "$DESK" ] && cp "$LOG" "$DESK/" 2>/dev/null
+
+copy_to_usb() {
+    local n=0 d
+    for d in /media/"$USER"/*/ /media/*/; do
+        [ -d "$d" ] && [ -w "$d" ] || continue
+        if cp "$LOG" "$d" 2>/dev/null; then
+            sync
+            n=$((n+1))
+            zenity --info --width=420 --title="DarkFox Netzwerk-Check" \
+                --text="Log kopiert nach:\n$d\n\nDu kannst den Stick jetzt sicher entfernen (vorher in Thunar auswerfen)."
+        fi
+    done
+    if [ "$n" -eq 0 ]; then
+        zenity --warning --width=440 --title="DarkFox Netzwerk-Check" \
+            --text="Kein beschreibbarer USB-Stick gefunden.\n\nStecke einen zweiten Stick (FAT32) ein, warte kurz und klicke dann noch einmal auf \"Auf USB-Stick kopieren\".\n\nDas Log liegt außerdem in deinem Home-Ordner:\n$LOG"
+    fi
+}
+
+while true; do
+    CHOICE=$(zenity --text-info --filename="$LOG" --width=780 --height=540 \
+        --title="DarkFox Netzwerk-Check (gespeichert: $LOG)" \
+        --ok-label="Schließen" \
+        --extra-button="Auf USB-Stick kopieren" --extra-button="Ordner öffnen")
+    case "$CHOICE" in
+        "Auf USB-Stick kopieren") copy_to_usb ;;
+        "Ordner öffnen") thunar "$HOME" >/dev/null 2>&1 & ;;
+        *) break ;;
+    esac
+done
 EOF
 
 cat > /usr/share/applications/darkfox-netcheck.desktop << 'EOF'
 [Desktop Entry]
 Type=Application
 Name=DarkFox Netzwerk-Check
-Comment=Zeigt, warum das Internet nicht geht
-Exec=/usr/local/bin/darkfox-netcheck
-Icon=network-wired
-Categories=System;Network;
-Terminal=false
-EOF
-
-cat > /etc/xdg/autostart/darkfox-setup.desktop << 'EOF'
-[Desktop Entry]
-Type=Application
-Name=DarkFox Setup
-Exec=/usr/local/bin/darkfox-setup
-Terminal=false
-X-GNOME-Autostart-Delay=3
-EOF
-
-cat > /etc/systemd/system/darkfox-password.service << 'EOF'
-[Unit]
-Description=Set default DarkFox user password (until first-time setup is done)
-After=live-config.service
-Before=display-manager.service
-ConditionPathExists=!/home/darkfox/.config/darkfox-setup-done
-
-[Service]
-Type=oneshot
-ExecStart=/bin/sh -c 'echo darkfox:live | chpasswd || true'
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-cat > /usr/share/applications/darkfox-doom.desktop << 'EOF'
-[Desktop Entry]
-Type=Application
-Name=Doom (Freedoom)
-Comment=Doom engine with the free Freedoom levels
-Exec=chocolate-doom -iwad /usr/share/games/doom/freedoom1.wad
-Icon=chocolate-doom
-Categories=Game;ActionGame;
-Terminal=false
-EOF
-
-chmod +x /usr/local/bin/darkfox-create-persistence /usr/local/bin/darkfox-setup /usr/local/bin/darkfox-netcheck
-systemctl enable darkfox-password.service 2>/dev/null || \
-    ln -sf /etc/systemd/system/darkfox-password.service \
-        /etc/systemd/system/multi-user.target.wants/darkfox-password.service
-systemctl enable NetworkManager 2>/dev/null || true
-
-# ------------------------------------------------------------------
-# 8. Rebuild initramfs so the boot splash is included
-# ------------------------------------------------------------------
-update-initramfs -u -k all || echo "initramfs update failed"
-apt-get clean || true
-
-echo "=== Branding done ==="
+Comment=Ze
