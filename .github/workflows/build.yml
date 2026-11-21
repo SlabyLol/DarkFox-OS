@@ -9,7 +9,7 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 150
+    timeout-minutes: 240
 
     steps:
       - uses: actions/checkout@v4
@@ -71,7 +71,7 @@ jobs:
             Write to USB with Rufus (DD mode), balenaEtcher, or:
             `sudo dd if=darkfox-os.iso of=/dev/sdX bs=4M status=progress oflag=sync`
 
-            If the ISO was split into `darkfox-os.iso.part00`, `.part01`, join the parts first:
+            If the ISO was split into `darkfox-os.iso.part00`, `.part01`, ... join the parts first:
             Linux: `cat darkfox-os.iso.part* > darkfox-os.iso`
-            Windows: `copy /b darkfox-os.iso.part00+darkfox-os.iso.part01 darkfox-os.iso`
+            Windows: `copy /b darkfox-os.iso.part00+darkfox-os.iso.part01+darkfox-os.iso.part02 darkfox-os.iso`
           files: release/*
