@@ -263,25 +263,34 @@ LOG=/tmp/darkfox-persistence.log
 exec > >(tee "$LOG") 2>&1
 fail() { echo "FEHLER: $*"; exit 1; }
 
+echo "== DarkFox persistence setup: $(date) =="
 [ "$(id -u)" -eq 0 ] || fail "root needed"
+echo "Kernel cmdline: $(cat /proc/cmdline)"
 
 if blkid -L persistence >/dev/null 2>&1; then
-    echo "persistence partition already exists"; exit 0
+    echo "persistence partition already exists: $(blkid -L persistence)"
+    exit 0
 fi
 
 SRC=$(findmnt -n -o SOURCE /run/live/medium 2>/dev/null)
-[ -n "$SRC" ] || fail "Boot-Medium nicht gefunden (/run/live/medium)"
+[ -n "$SRC" ] || SRC=$(blkid -L DarkFox_OS 2>/dev/null)
+[ -n "$SRC" ] || fail "Boot-Medium nicht gefunden"
+echo "Boot medium: $SRC"
 
 PK=$(lsblk -no PKNAME "$SRC" 2>/dev/null | head -n1)
 if [ -n "$PK" ]; then DISK="/dev/$PK"; else DISK="$SRC"; fi
 [ -b "$DISK" ] || fail "Datentraeger $DISK nicht gefunden"
-echo "Boot disk: $DISK ($(blkid -p -s PTTYPE -o value "$DISK" 2>/dev/null))"
+PTT=$(blkid -p -s PTTYPE -o value "$DISK" 2>/dev/null)
+echo "Boot disk: $DISK   partition table: ${PTT:-none}"
+lsblk -f "$DISK"
+sfdisk -l "$DISK" 2>&1 || true
+sfdisk -F "$DISK" 2>&1 || true
 
 BEFORE=$(lsblk -lnpo NAME "$DISK" | sort)
 
-case "$(blkid -p -s PTTYPE -o value "$DISK" 2>/dev/null)" in
+case "$PTT" in
     gpt)
-        sgdisk -e "$DISK" || fail "sgdisk -e"
+        sgdisk -e "$DISK" || fail "sgdisk -e fehlgeschlagen"
         sgdisk -n 0:0:0 -t 0:8300 -c 0:persistence "$DISK" || fail "sgdisk: kein freier Platz auf dem Stick?"
         ;;
     *)
@@ -289,59 +298,89 @@ case "$(blkid -p -s PTTYPE -o value "$DISK" 2>/dev/null)" in
         ;;
 esac
 
-partprobe "$DISK" 2>/dev/null || partx -a "$DISK" 2>/dev/null || true
-udevadm settle 2>/dev/null || true
-sleep 3
-
-NEW=$(comm -13 <(echo "$BEFORE") <(lsblk -lnpo NAME "$DISK" | sort) | head -n1)
-[ -b "$NEW" ] || fail "neue Partition nicht gefunden"
+NEW=""
+for try in 1 2 3 4 5; do
+    partprobe "$DISK" 2>/dev/null || true
+    partx -a "$DISK" 2>/dev/null || true
+    udevadm settle 2>/dev/null || true
+    sleep 2
+    NEW=$(comm -13 <(echo "$BEFORE") <(lsblk -lnpo NAME "$DISK" | sort) | head -n1)
+    [ -b "$NEW" ] && break
+done
+[ -b "$NEW" ] || fail "neue Partition wurde vom Kernel nicht erkannt"
 echo "Neue Partition: $NEW"
 
-mkfs.ext4 -F -L persistence "$NEW" || fail "mkfs.ext4"
+# safety: never format something that already has a filesystem or is mounted
+[ -z "$(blkid -p -s TYPE -o value "$NEW" 2>/dev/null)" ] || fail "$NEW hat schon ein Dateisystem - abgebrochen"
+findmnt -n "$NEW" >/dev/null 2>&1 && fail "$NEW ist eingehaengt - abgebrochen"
+
+mkfs.ext4 -F -L persistence "$NEW" || fail "mkfs.ext4 fehlgeschlagen"
 
 MNT=$(mktemp -d)
-mount "$NEW" "$MNT" || fail "mount"
+mount "$NEW" "$MNT" || fail "mount fehlgeschlagen"
 echo "/ union" > "$MNT/persistence.conf"
 sync
 umount "$MNT"
 rmdir "$MNT"
-echo "Fertig."
+echo "Fertig. Label: $(blkid -s LABEL -o value "$NEW")"
 EOF
 
 cat > /usr/local/bin/darkfox-setup << 'EOF'
 #!/bin/bash
-# DarkFox OS first-time setup:
-#  1. create storage on the USB stick (persistence) -> reboot
-#  2. choose a password for the user
+# DarkFox OS setup.   darkfox-setup          -> first-time setup (storage + password)
+#                     darkfox-setup storage  -> only the storage step (menu entry)
+MODE="${1:-all}"
 MARK="$HOME/.config/darkfox-setup-done"
-[ -e "$MARK" ] && exit 0
-sleep 4
+if [ "$MODE" != "storage" ]; then
+    [ -e "$MARK" ] && exit 0
+    sleep 4
+fi
 
 persistence_active() { ls -d /run/live/persistence/* >/dev/null 2>&1; }
 
-if ! persistence_active; then
+setup_storage() {
+    if blkid -L persistence >/dev/null 2>&1; then
+        zenity --error --title="DarkFox OS" --width=480 \
+            --text="Der Speicher auf dem Stick existiert schon, ist aber nicht aktiv.\n\nStarte den Laptop einmal ganz neu (Stick stecken lassen).\nWenn es danach immer noch nicht geht, öffnet sich gleich die Diagnose.\nKlicke dort auf \"Auf USB-Stick kopieren\" und schicke mir die Datei."
+        /usr/local/bin/darkfox-diagnose &
+        return
+    fi
+
     zenity --question --title="DarkFox OS Einrichtung" --width=440 \
         --ok-label="Jetzt einrichten" --cancel-label="Später" \
         --text="Willkommen bei DarkFox OS!\n\nDamit deine Dateien und Einstellungen auf dem USB-Stick gespeichert bleiben, wird einmalig Speicherplatz auf dem Stick angelegt.\n\nDer Laptop startet danach neu.\nDen Stick dabei bitte nicht abziehen." \
-        || exit 0
+        || return
 
     zenity --info --no-wrap --title="DarkFox OS" \
         --text="Speicher wird angelegt, bitte warten ...\nStick nicht abziehen!" &
     DLG=$!
     sudo -n /usr/local/bin/darkfox-create-persistence >/dev/null 2>&1
     kill "$DLG" 2>/dev/null
+    cp /tmp/darkfox-persistence.log "$HOME/darkfox-persistence.log" 2>/dev/null
 
     if blkid -L persistence >/dev/null 2>&1; then
         zenity --info --title="DarkFox OS" --width=380 \
             --text="Fertig! Der Laptop startet jetzt neu.\nStick bitte stecken lassen."
-        sudo systemctl reboot
+        sudo -n systemctl reboot
     else
-        zenity --error --title="DarkFox OS" --width=480 \
-            --text="Der Speicher konnte nicht angelegt werden.\n\n$(tail -n 8 /tmp/darkfox-persistence.log 2>/dev/null)"
+        zenity --error --title="DarkFox OS" --width=520 \
+            --text="Der Speicher konnte nicht angelegt werden.\n\n$(tail -n 6 /tmp/darkfox-persistence.log 2>/dev/null)\n\nGleich öffnet sich die Diagnose. Klicke dort auf \"Auf USB-Stick kopieren\"."
+        /usr/local/bin/darkfox-diagnose &
     fi
+}
+
+if ! persistence_active; then
+    setup_storage
     exit 0
 fi
 
+if [ "$MODE" = "storage" ]; then
+    zenity --info --title="DarkFox OS" --width=420 \
+        --text="Der Speicher auf dem Stick ist aktiv.\nDeine Dateien und Einstellungen bleiben erhalten."
+    exit 0
+fi
+
+# storage is active: let the user choose a password
 while true; do
     OUT=$(zenity --forms --title="DarkFox OS Einrichtung" --width=440 \
         --text="Wähle ein Passwort für den Benutzer 'darkfox'." \
@@ -358,23 +397,39 @@ while true; do
     fi
 done
 
-echo "$USER:$PW1" | sudo chpasswd
+echo "$USER:$PW1" | sudo -n chpasswd
 mkdir -p "$HOME/.config"
 touch "$MARK"
 zenity --info --title="DarkFox OS" --text="Einrichtung abgeschlossen.\nDeine Dateien bleiben jetzt auf dem Stick."
 EOF
 
-cat > /usr/local/bin/darkfox-netcheck << 'EOF'
+cat > /usr/local/bin/darkfox-diagnose << 'EOF'
 #!/bin/bash
-# Network check: collects diagnostics, saves them as a log file and lets you
-# copy that file to a USB stick (to send it to someone for help).
+# Diagnose: collects network + storage information, saves it as a log file
+# and lets you copy that file to a USB stick (to send it for help).
 export PATH="$PATH:/usr/sbin:/sbin"
-LOG="$HOME/darkfox-netcheck.log"
+LOG="$HOME/darkfox-diagnose.log"
+SRC=$(findmnt -n -o SOURCE /run/live/medium 2>/dev/null)
+PK=$(lsblk -no PKNAME "$SRC" 2>/dev/null | head -n1)
+if [ -n "$PK" ]; then BOOTDISK="/dev/$PK"; else BOOTDISK="$SRC"; fi
 
 {
-    echo "DarkFox Netzwerk-Check - $(date)"
+    echo "DarkFox Diagnose - $(date)"
     echo "Kernel: $(uname -r)"
-    echo; echo "== Geraete (nmcli) =="; nmcli device status
+    echo; echo "############ SPEICHER ############"
+    echo "== Kernel-Optionen =="; cat /proc/cmdline
+    echo; echo "== Laufwerke =="; lsblk -f
+    echo; echo "== Boot-Medium =="; findmnt /run/live/medium
+    echo; echo "== Partition mit Label persistence =="; blkid -L persistence || echo "KEINE"
+    echo; echo "== Aktiver Speicher =="; ls -la /run/live/persistence/ 2>&1
+    cat /run/live/persistence/*/persistence.conf 2>&1
+    echo; echo "== Root-Dateisystem =="; findmnt /; df -h / /home
+    echo; echo "== Partitionstabelle Boot-Stick =="
+    [ -n "$BOOTDISK" ] && sudo -n sfdisk -l "$BOOTDISK" 2>&1
+    echo; echo "== Log der Speicher-Einrichtung =="; cat /tmp/darkfox-persistence.log 2>&1
+    echo
+    echo "############ NETZWERK ############"
+    echo "== Geraete (nmcli) =="; nmcli device status
     echo; echo "== IP-Adressen =="; ip -br addr
     echo; echo "== WLAN-Netze =="; nmcli -f SSID,SIGNAL,SECURITY device wifi list 2>&1 | head -n 12
     echo; echo "== rfkill =="; rfkill list
@@ -399,19 +454,19 @@ copy_to_usb() {
         if cp "$LOG" "$d" 2>/dev/null; then
             sync
             n=$((n+1))
-            zenity --info --width=420 --title="DarkFox Netzwerk-Check" \
+            zenity --info --width=420 --title="DarkFox Diagnose" \
                 --text="Log kopiert nach:\n$d\n\nDu kannst den Stick jetzt sicher entfernen (vorher in Thunar auswerfen)."
         fi
     done
     if [ "$n" -eq 0 ]; then
-        zenity --warning --width=440 --title="DarkFox Netzwerk-Check" \
+        zenity --warning --width=440 --title="DarkFox Diagnose" \
             --text="Kein beschreibbarer USB-Stick gefunden.\n\nStecke einen zweiten Stick (FAT32) ein, warte kurz und klicke dann noch einmal auf \"Auf USB-Stick kopieren\".\n\nDas Log liegt außerdem in deinem Home-Ordner:\n$LOG"
     fi
 }
 
 while true; do
     CHOICE=$(zenity --text-info --filename="$LOG" --width=780 --height=540 \
-        --title="DarkFox Netzwerk-Check (gespeichert: $LOG)" \
+        --title="DarkFox Diagnose (gespeichert: $LOG)" \
         --ok-label="Schließen" \
         --extra-button="Auf USB-Stick kopieren" --extra-button="Ordner öffnen")
     case "$CHOICE" in
@@ -422,8 +477,117 @@ while true; do
 done
 EOF
 
-cat > /usr/share/applications/darkfox-netcheck.desktop << 'EOF'
+cat > /usr/share/applications/darkfox-diagnose.desktop << 'EOF'
 [Desktop Entry]
 Type=Application
-Name=DarkFox Netzwerk-Check
-Comment=Ze
+Name=DarkFox Diagnose (Netzwerk und Speicher)
+Comment=Zeigt, warum Internet oder Speichern nicht geht
+Exec=/usr/local/bin/darkfox-diagnose
+Icon=utilities-system-monitor
+Categories=System;
+Terminal=false
+EOF
+
+cat > /usr/share/applications/darkfox-storage.desktop << 'EOF'
+[Desktop Entry]
+Type=Application
+Name=DarkFox Speicher einrichten
+Comment=Dateien und Einstellungen auf dem USB-Stick speichern
+Exec=/usr/local/bin/darkfox-setup storage
+Icon=drive-removable-media
+Categories=System;
+Terminal=false
+EOF
+
+cat > /etc/xdg/autostart/darkfox-setup.desktop << 'EOF'
+[Desktop Entry]
+Type=Application
+Name=DarkFox Setup
+Exec=/usr/local/bin/darkfox-setup
+Terminal=false
+X-GNOME-Autostart-Delay=3
+EOF
+
+cat > /etc/systemd/system/darkfox-password.service << 'EOF'
+[Unit]
+Description=Set default DarkFox user password (until first-time setup is done)
+After=live-config.service
+Before=display-manager.service
+ConditionPathExists=!/home/darkfox/.config/darkfox-setup-done
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c 'echo darkfox:live | chpasswd || true'
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+cat > /usr/share/applications/darkfox-doom.desktop << 'EOF'
+[Desktop Entry]
+Type=Application
+Name=Doom (Freedoom)
+Comment=Doom engine with the free Freedoom levels
+Exec=chocolate-doom -iwad /usr/share/games/doom/freedoom1.wad
+Icon=chocolate-doom
+Categories=Game;ActionGame;
+Terminal=false
+EOF
+
+chmod +x /usr/local/bin/darkfox-create-persistence /usr/local/bin/darkfox-setup /usr/local/bin/darkfox-diagnose /usr/local/bin/darkfox-store
+systemctl enable darkfox-password.service 2>/dev/null || \
+    ln -sf /etc/systemd/system/darkfox-password.service \
+        /etc/systemd/system/multi-user.target.wants/darkfox-password.service
+systemctl enable NetworkManager 2>/dev/null || true
+
+# ------------------------------------------------------------------
+# 7b. DarkFox OS Store (Debian packages + Flathub) and package settings
+# ------------------------------------------------------------------
+# install recommended packages too when installing software later
+cat > /etc/apt/apt.conf.d/99darkfox << 'EOF'
+APT::Install-Recommends "true";
+APT::Install-Suggests "false";
+EOF
+
+# Flathub (build continues if there is no network)
+flatpak remote-add --system --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo \
+    || echo "flathub remote skipped (will be added when the store starts)"
+
+# password dialog for the store / installer
+cat > /etc/xdg/autostart/darkfox-polkit.desktop << 'EOF'
+[Desktop Entry]
+Type=Application
+Name=DarkFox Polkit Agent
+Exec=/usr/lib/policykit-1-gnome/polkit-gnome-authentication-agent-1
+Terminal=false
+NoDisplay=true
+EOF
+
+cat > /usr/local/bin/darkfox-store << 'EOF'
+#!/bin/bash
+# DarkFox OS Store: Debian packages (apt) + Flathub (Flatpak) in GNOME Software
+if command -v flatpak >/dev/null 2>&1 && ! flatpak remotes --system 2>/dev/null | grep -q flathub; then
+    sudo -n flatpak remote-add --system --if-not-exists flathub \
+        https://dl.flathub.org/repo/flathub.flatpakrepo 2>/dev/null
+fi
+exec gnome-software "$@"
+EOF
+
+cat > /usr/share/applications/darkfox-store.desktop << 'EOF'
+[Desktop Entry]
+Type=Application
+Name=DarkFox OS Store
+Comment=Programme aus Debian und Flathub installieren
+Exec=/usr/local/bin/darkfox-store
+Icon=org.gnome.Software
+Categories=System;PackageManager;
+Terminal=false
+EOF
+
+# ------------------------------------------------------------------
+# 8. Rebuild initramfs so the boot splash is included
+# ------------------------------------------------------------------
+update-initramfs -u -k all || echo "initramfs update failed"
+apt-get clean || true
+
+echo "=== Branding done ==="
