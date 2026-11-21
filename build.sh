@@ -19,47 +19,45 @@ apt-get install -y --no-install-recommends \
 
 chmod +x auto/* config/hooks/live/* 2>/dev/null || true
 
-lb clean || true
-lb config
-lb bootstrap
-lb chroot
-
 # ------------------------------------------------------------------
-# Boot without a menu (BIOS + UEFI).
-# The real kernel file names are only known now, so the bootloader
-# configs are generated here and copied over the defaults by
-# live-build (config/includes.binary is applied after the bootloaders).
+# Remove the boot menu (BIOS + UEFI).
+# This runs on the FINISHED binary tree, so it does not depend on the
+# order live-build uses internally. Afterwards only the ISO image is
+# rebuilt from the changed tree.
 # ------------------------------------------------------------------
-KERNEL=$(ls chroot/boot/vmlinuz-* | sort -V | tail -n1)
-KVER=${KERNEL##*/vmlinuz-}
-[ -e "chroot/boot/initrd.img-$KVER" ] || { echo "initrd for $KVER not found" >&2; exit 1; }
-APPEND=$( . ./config/binary; printf '%s' "$LB_BOOTAPPEND_LIVE" )
-[ -n "$APPEND" ] || { echo "LB_BOOTAPPEND_LIVE is empty" >&2; exit 1; }
-echo "Kernel: $KVER"
-echo "Boot options: $APPEND"
+patch_boot() {
+    local V I APPEND
+    [ -f binary/boot/grub/grub.cfg ] || { echo "no binary/boot/grub/grub.cfg"; return 1; }
+    [ -d binary/isolinux ]           || { echo "no binary/isolinux"; return 1; }
 
-rm -rf config/includes.binary
-mkdir -p config/includes.binary/isolinux config/includes.binary/boot/grub
+    V=$(ls binary/live/vmlinuz*    2>/dev/null | sort -V | tail -n1); V=${V##*/}
+    I=$(ls binary/live/initrd.img* 2>/dev/null | sort -V | tail -n1); I=${I##*/}
+    [ -n "$V" ] && [ -n "$I" ] || { echo "kernel/initrd not found in binary/live"; return 1; }
 
-# BIOS (syslinux): no menu; hold Shift at start and type "safe" for safe graphics
-cat > config/includes.binary/isolinux/isolinux.cfg << CFG
+    APPEND=$( . ./config/binary; printf '%s' "$LB_BOOTAPPEND_LIVE" )
+    [ -n "$APPEND" ] || { echo "LB_BOOTAPPEND_LIVE is empty"; return 1; }
+    echo "Boot files: $V / $I"
+    echo "Boot options: $APPEND"
+
+    # BIOS (syslinux): no menu; hold Shift at start and type "safe" for safe graphics
+    cat > binary/isolinux/isolinux.cfg << CFG
 default live
 prompt 0
 timeout 1
 
 label live
-    linux /live/vmlinuz-$KVER
-    initrd /live/initrd.img-$KVER
+    linux /live/$V
+    initrd /live/$I
     append $APPEND
 
 label safe
-    linux /live/vmlinuz-$KVER
-    initrd /live/initrd.img-$KVER
+    linux /live/$V
+    initrd /live/$I
     append $APPEND nomodeset
 CFG
 
-# UEFI (GRUB): boots after 1 second without a menu; press Esc for the menu
-cat > config/includes.binary/boot/grub/grub.cfg << CFG
+    # UEFI (GRUB): boots after 1 second without a menu; press Esc for the menu
+    cat > binary/boot/grub/grub.cfg << CFG
 set default=0
 set timeout=1
 set timeout_style=hidden
@@ -67,17 +65,31 @@ search --no-floppy --set=root --file /live/filesystem.squashfs
 set gfxpayload=keep
 
 menuentry "DarkFox OS" {
-    linux /live/vmlinuz-$KVER $APPEND
-    initrd /live/initrd.img-$KVER
+    linux /live/$V $APPEND
+    initrd /live/$I
 }
 
 menuentry "DarkFox OS (safe graphics)" {
-    linux /live/vmlinuz-$KVER $APPEND nomodeset
-    initrd /live/initrd.img-$KVER
+    linux /live/$V $APPEND nomodeset
+    initrd /live/$I
 }
 CFG
+    return 0
+}
 
+lb clean || true
+lb config
+lb bootstrap
+lb chroot
 lb binary
+
+if patch_boot; then
+    echo "=== Boot menu removed, rebuilding ISO image ==="
+    rm -f live-image-*.iso .build/binary_iso
+    lb binary_iso
+else
+    echo "WARNING: could not remove the boot menu, ISO keeps the default menu"
+fi
 
 mv live-image-*.iso darkfox-os.iso
 ls -lh darkfox-os.iso
