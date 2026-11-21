@@ -1,0 +1,297 @@
+#!/bin/sh
+set -e
+export DEBIAN_FRONTEND=noninteractive
+echo "=== DarkFox OS: custom design ==="
+
+apt-get install -y --no-install-recommends xfce4-whiskermenu-plugin \
+    || echo "whiskermenu plugin not installed"
+
+# put <path relative to home> : writes stdin to /etc/skel and to the existing user's home
+put() {
+    f="$1"
+    tmp=$(mktemp)
+    cat > "$tmp"
+    for H in /etc/skel /home/darkfox; do
+        [ -d "$H" ] || continue
+        mkdir -p "$H/$(dirname "$f")"
+        cp "$tmp" "$H/$f"
+    done
+    rm -f "$tmp"
+}
+
+XFCONF=.config/xfce4/xfconf/xfce-perchannel-xml
+F=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf
+W=/tmp/darkfox-design
+rm -rf "$W"; mkdir -p "$W"
+
+# ------------------------------------------------------------------
+# 1. Logo (fox head) in all sizes + boot splash logo + wallpaper
+# ------------------------------------------------------------------
+convert -size 256x256 xc:none \
+  -fill '#ff7a1a' -draw 'polygon 26,24 108,100 20,146' \
+  -draw 'polygon 230,24 148,100 236,146' \
+  -draw 'polygon 20,146 108,100 128,110 148,100 236,146 202,212 128,244 54,212' \
+  -fill '#b83b0a' -draw 'polygon 44,56 90,102 40,124' \
+  -draw 'polygon 212,56 166,102 216,124' \
+  -fill '#fff1e0' -draw 'polygon 54,212 92,168 128,190 164,168 202,212 128,244' \
+  -fill '#0b0f1a' -draw 'circle 90,150 90,160' -draw 'circle 166,150 166,160' \
+  -draw 'polygon 112,208 144,208 128,226' \
+  "$W/fox.png" || echo "fox logo failed"
+
+mkdir -p /usr/share/pixmaps
+cp "$W/fox.png" /usr/share/pixmaps/darkfox-logo.png
+for S in 32 48 64 128 256; do
+    mkdir -p /usr/share/icons/hicolor/${S}x${S}/apps
+    convert "$W/fox.png" -resize ${S}x${S} /usr/share/icons/hicolor/${S}x${S}/apps/darkfox.png || true
+done
+gtk-update-icon-cache -f /usr/share/icons/hicolor 2>/dev/null || true
+
+# boot splash logo: fox above the text
+convert -background none -font "$F" -pointsize 96 \
+    -fill '#e8eefc' label:"Dark" -fill '#ff7a1a' label:"Fox" \
+    \( -size 28x10 xc:none \) -fill '#e8eefc' label:"OS" +append +repage "$W/text.png" || true
+convert "$W/fox.png" -resize 150x150 "$W/text.png" -background none -gravity center -append +repage \
+    /usr/share/plymouth/themes/darkfox/logo.png || echo "plymouth logo failed"
+
+# wallpaper: gradient + big faint fox + faint name
+convert -size 1920x1080 gradient:'#0b0f1a-#1b2340' \
+    \( "$W/fox.png" -resize 560x560 -channel A -evaluate multiply 0.10 +channel \) \
+    -gravity center -geometry +0-40 -composite \
+    \( -background none -font "$F" -pointsize 54 -fill 'rgba(255,255,255,0.22)' label:"DarkFox OS" \) \
+    -gravity south -geometry +0+70 -composite \
+    /usr/share/backgrounds/darkfox.png || echo "wallpaper failed"
+
+# ------------------------------------------------------------------
+# 2. GTK look: orange accent on the dark theme + panel/taskbar styling
+# ------------------------------------------------------------------
+put .config/gtk-3.0/gtk.css << 'EOF'
+/* DarkFox OS accent: orange */
+selection, *:selected, .view:selected, row:selected, treeview.view:selected {
+    background-color: #ff7a1a;
+    color: #0b0f1a;
+}
+menuitem:hover, .menuitem:hover, menu menuitem:hover {
+    background-color: #ff7a1a;
+    color: #0b0f1a;
+}
+progressbar progress, scale highlight, scale fill, switch:checked,
+checkbutton check:checked, radiobutton radio:checked {
+    background-color: #ff7a1a;
+    border-color: #ff7a1a;
+    background-image: none;
+}
+button.suggested-action {
+    background-image: none;
+    background-color: #ff7a1a;
+    color: #0b0f1a;
+    border-color: #ff7a1a;
+}
+entry:focus, spinbutton:focus {
+    border-color: #ff7a1a;
+}
+link, *:link {
+    color: #ff9d57;
+}
+
+/* taskbar */
+.xfce4-panel button, #XfcePanelWindow button {
+    color: #e8eefc;
+    border-radius: 8px;
+    margin: 3px 2px;
+}
+.xfce4-panel button:hover, #XfcePanelWindow button:hover {
+    background-color: rgba(255, 122, 26, 0.22);
+}
+.xfce4-panel button:checked, #XfcePanelWindow button:checked {
+    background-color: rgba(255, 255, 255, 0.10);
+    border-bottom: 3px solid #ff7a1a;
+}
+EOF
+
+put $XFCONF/xsettings.xml << 'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<channel name="xsettings" version="1.0">
+  <property name="Net" type="empty">
+    <property name="ThemeName" type="string" value="Arc-Dark"/>
+    <property name="IconThemeName" type="string" value="Papirus-Dark"/>
+    <property name="EnableEventSounds" type="bool" value="true"/>
+    <property name="EnableInputFeedbackSounds" type="bool" value="true"/>
+    <property name="SoundThemeName" type="string" value="freedesktop"/>
+  </property>
+  <property name="Gtk" type="empty">
+    <property name="FontName" type="string" value="Noto Sans 10"/>
+    <property name="MonospaceFontName" type="string" value="Fira Code 11"/>
+  </property>
+  <property name="Xft" type="empty">
+    <property name="Antialias" type="int" value="1"/>
+    <property name="Hinting" type="int" value="1"/>
+    <property name="HintStyle" type="string" value="hintslight"/>
+    <property name="RGBA" type="string" value="rgb"/>
+  </property>
+</channel>
+EOF
+
+put $XFCONF/xfwm4.xml << 'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<channel name="xfwm4" version="1.0">
+  <property name="general" type="empty">
+    <property name="theme" type="string" value="Arc-Dark"/>
+    <property name="use_compositing" type="bool" value="true"/>
+    <property name="title_alignment" type="string" value="center"/>
+    <property name="title_font" type="string" value="Noto Sans Bold 10"/>
+    <property name="button_layout" type="string" value="O|HMC"/>
+    <property name="show_frame_shadow" type="bool" value="true"/>
+    <property name="show_popup_shadow" type="bool" value="true"/>
+    <property name="shadow_opacity" type="int" value="60"/>
+    <property name="snap_to_border" type="bool" value="true"/>
+    <property name="workspace_count" type="int" value="2"/>
+  </property>
+</channel>
+EOF
+
+# ------------------------------------------------------------------
+# 3. Start menu (Whisker) with the fox button
+# ------------------------------------------------------------------
+put .config/xfce4/panel/whiskermenu-1.rc << 'EOF'
+favorites=firefox-esr.desktop,thunar.desktop,xfce4-terminal.desktop,code.desktop,darkfox-store.desktop
+button-title=DarkFox
+button-icon=darkfox
+show-button-title=true
+show-button-icon=true
+button-single-row=false
+launcher-show-name=true
+launcher-show-description=false
+item-icon-size=3
+category-icon-size=2
+menu-width=560
+menu-height=520
+menu-opacity=96
+profile-shape=0
+EOF
+
+# ------------------------------------------------------------------
+# 4. Taskbar (bottom, dark and translucent) with app launchers
+# ------------------------------------------------------------------
+ID=10
+LAUNCHER_ORDER=""
+LAUNCHER_XML=""
+for app in firefox-esr thunar xfce4-terminal code darkfox-store; do
+    [ -f "/usr/share/applications/$app.desktop" ] || continue
+    ID=$((ID+1))
+    for H in /etc/skel /home/darkfox; do
+        [ -d "$H" ] || continue
+        mkdir -p "$H/.config/xfce4/panel/launcher-$ID"
+        cp "/usr/share/applications/$app.desktop" "$H/.config/xfce4/panel/launcher-$ID/$app.desktop"
+    done
+    LAUNCHER_ORDER="$LAUNCHER_ORDER $ID"
+    LAUNCHER_XML="$LAUNCHER_XML
+    <property name=\"plugin-$ID\" type=\"string\" value=\"launcher\">
+      <property name=\"items\" type=\"array\">
+        <value type=\"string\" value=\"$app.desktop\"/>
+      </property>
+    </property>"
+done
+
+IDS_XML=""
+for i in 1 2 $LAUNCHER_ORDER 4 3 5 6 7 8 9; do
+    IDS_XML="$IDS_XML
+        <value type=\"int\" value=\"$i\"/>"
+done
+
+put $XFCONF/xfce4-panel.xml << EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<channel name="xfce4-panel" version="1.0">
+  <property name="configver" type="int" value="2"/>
+  <property name="panels" type="array">
+    <value type="int" value="1"/>
+    <property name="dark-mode" type="bool" value="true"/>
+    <property name="panel-1" type="empty">
+      <property name="position" type="string" value="p=8;x=0;y=0"/>
+      <property name="length" type="uint" value="100"/>
+      <property name="position-locked" type="bool" value="true"/>
+      <property name="size" type="uint" value="44"/>
+      <property name="icon-size" type="uint" value="24"/>
+      <property name="background-style" type="uint" value="1"/>
+      <property name="background-rgba" type="array">
+        <value type="double" value="0.043"/>
+        <value type="double" value="0.059"/>
+        <value type="double" value="0.102"/>
+        <value type="double" value="0.92"/>
+      </property>
+      <property name="plugin-ids" type="array">$IDS_XML
+      </property>
+    </property>
+  </property>
+  <property name="plugins" type="empty">
+    <property name="plugin-1" type="string" value="whiskermenu"/>
+    <property name="plugin-2" type="string" value="separator">
+      <property name="style" type="uint" value="0"/>
+    </property>
+    <property name="plugin-3" type="string" value="tasklist">
+      <property name="grouping" type="uint" value="1"/>
+      <property name="flat-buttons" type="bool" value="true"/>
+      <property name="show-handle" type="bool" value="false"/>
+      <property name="show-labels" type="bool" value="true"/>
+    </property>
+    <property name="plugin-4" type="string" value="separator">
+      <property name="style" type="uint" value="0"/>
+    </property>
+    <property name="plugin-5" type="string" value="systray">
+      <property name="show-frame" type="bool" value="false"/>
+      <property name="size-max" type="uint" value="22"/>
+    </property>
+    <property name="plugin-6" type="string" value="pulseaudio"/>
+    <property name="plugin-7" type="string" value="power-manager-plugin"/>
+    <property name="plugin-8" type="string" value="clock">
+      <property name="digital-layout" type="uint" value="2"/>
+      <property name="digital-date-format" type="string" value="%a %d.%m."/>
+      <property name="digital-time-format" type="string" value="%H:%M"/>
+    </property>
+    <property name="plugin-9" type="string" value="showdesktop"/>$LAUNCHER_XML
+  </property>
+</channel>
+EOF
+
+# ------------------------------------------------------------------
+# 5. Login screen
+# ------------------------------------------------------------------
+cat > /etc/lightdm/lightdm-gtk-greeter.conf << 'EOF'
+[greeter]
+background=/usr/share/backgrounds/darkfox.png
+theme-name=Arc-Dark
+icon-theme-name=Papirus-Dark
+font-name=Noto Sans 11
+xft-antialias=true
+clock-format=%H:%M  -  %d.%m.%Y
+indicators=~host;~spacer;~clock;~spacer;~session;~a11y;~power
+panel-position=top
+EOF
+
+# ------------------------------------------------------------------
+# 6. Installer (Calamares): colours and logo
+# ------------------------------------------------------------------
+for f in $(find /etc/calamares /usr/share/calamares -name branding.desc 2>/dev/null); do
+    d=$(dirname "$f")
+    sed -i -E '
+        s/^([[:space:]]*sidebarBackground:[[:space:]]*).*/\1"#0b0f1a"/
+        s/^([[:space:]]*sidebarText:[[:space:]]*).*/\1"#e8eefc"/
+        s/^([[:space:]]*sidebarTextSelect:[[:space:]]*).*/\1"#ff7a1a"/
+        s/^([[:space:]]*sidebarTextHighlight:[[:space:]]*).*/\1"#1b2340"/
+    ' "$f"
+    for key in productLogo productIcon; do
+        img=$(sed -n -E "s/^[[:space:]]*$key:[[:space:]]*\"?([^\"#[:space:]]+)\"?.*/\1/p" "$f" | head -n1)
+        case "$img" in
+            *.png) [ -f "$d/$img" ] && cp /usr/share/pixmaps/darkfox-logo.png "$d/$img" ;;
+        esac
+    done
+    echo "installer design updated: $f"
+done
+
+# ------------------------------------------------------------------
+# 7. Finish: ownership + rebuild initramfs (new boot splash logo)
+# ------------------------------------------------------------------
+chown -R darkfox:darkfox /home/darkfox 2>/dev/null || true
+rm -rf "$W"
+update-initramfs -u -k all || echo "initramfs update failed"
+
+echo "=== Design done ==="
