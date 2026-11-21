@@ -1,0 +1,66 @@
+#!/bin/sh
+set -e
+echo "=== DarkFox OS: replacing Debian branding ==="
+
+# ------------------------------------------------------------------
+# System name (os-release). ID_LIKE=debian keeps Debian tools working.
+# The original file is diverted so package updates do not bring it back.
+# ------------------------------------------------------------------
+dpkg-divert --package darkfox --local --divert /usr/lib/os-release.debian \
+    --rename /usr/lib/os-release 2>/dev/null || true
+
+cat > /usr/lib/os-release << 'EOF'
+PRETTY_NAME="DarkFox OS 1.0"
+NAME="DarkFox OS"
+VERSION_ID="12"
+VERSION="1.0"
+VERSION_CODENAME=bookworm
+ID=darkfox
+ID_LIKE=debian
+HOME_URL="https://github.com/SlabyLol/DarkFox-OS"
+SUPPORT_URL="https://github.com/SlabyLol/DarkFox-OS/issues"
+BUG_REPORT_URL="https://github.com/SlabyLol/DarkFox-OS/issues"
+EOF
+ln -sf ../usr/lib/os-release /etc/os-release
+
+cat > /etc/lsb-release << 'EOF'
+DISTRIB_ID=DarkFox
+DISTRIB_RELEASE=1.0
+DISTRIB_CODENAME=bookworm
+DISTRIB_DESCRIPTION="DarkFox OS 1.0"
+EOF
+
+# Login prompts and welcome text
+printf 'DarkFox OS 1.0 \\n \\l\n\n' > /etc/issue
+printf 'DarkFox OS 1.0\n' > /etc/issue.net
+cat > /etc/motd << 'EOF'
+
+  DarkFox OS - Willkommen!
+
+EOF
+
+# ------------------------------------------------------------------
+# Installer (Calamares): product name and boot entry
+# ------------------------------------------------------------------
+for f in $(find /etc/calamares /usr/share/calamares -name branding.desc 2>/dev/null); do
+    sed -i -E '
+        /^[[:space:]]*(productName|shortProductName|bootloaderEntryName):/ {
+            s/Debian GNU\/Linux/DarkFox OS/g
+            s/Debian/DarkFox OS/g
+        }
+        s/^([[:space:]]*(versionedName|shortVersionedName):[[:space:]]*).*/\1DarkFox OS 1.0/
+        s/^([[:space:]]*(version|shortVersion):[[:space:]]*).*/\11.0/
+    ' "$f"
+    echo "branding updated: $f"
+done
+
+# Name of the boot entry in an installed system
+if [ -f /etc/default/grub ]; then
+    if grep -q '^GRUB_DISTRIBUTOR=' /etc/default/grub; then
+        sed -i 's/^GRUB_DISTRIBUTOR=.*/GRUB_DISTRIBUTOR="DarkFox OS"/' /etc/default/grub
+    else
+        echo 'GRUB_DISTRIBUTOR="DarkFox OS"' >> /etc/default/grub
+    fi
+fi
+
+echo "=== Rename done ==="
