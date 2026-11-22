@@ -57,21 +57,39 @@ jobs:
           path: build.log
           if-no-files-found: ignore
 
+      - name: Prepare release notes
+        run: |
+          {
+            echo "DarkFox OS v${{ github.run_number }} - XFCE live system, bootable on BIOS and UEFI."
+            echo
+            echo "# What's new"
+            if [ -f CHANGELOG.md ]; then
+              awk '/^## /{n++} n==1' CHANGELOG.md
+              echo
+              echo "Full history: file \`CHANGELOG.md\` in the release files."
+            else
+              echo "(No changelog available.)"
+            fi
+            echo
+            echo "# Installation"
+            echo
+            echo "**Login:** user \`darkfox\`, password \`live\` (automatic login). After the first-time setup your own password is used."
+            echo "**Secure Boot must be turned off** in the BIOS."
+            echo
+            echo "Write the ISO to a USB stick with Balena Etcher, Rufus (DD mode) or:"
+            echo "\`sudo dd if=darkfox-os.iso of=/dev/sdX bs=4M status=progress oflag=sync\`"
+            echo
+            echo "If the ISO is split into parts (\`darkfox-os.iso.part00\`, \`.part01\` ...), join them first:"
+            echo "Linux/Mac: \`cat darkfox-os.iso.part* > darkfox-os.iso\`"
+            echo "Windows: \`copy /b darkfox-os.iso.part00+darkfox-os.iso.part01+darkfox-os.iso.part02 darkfox-os.iso\`"
+          } > release-notes.md
+          cat release-notes.md
+          [ -f CHANGELOG.md ] && cp CHANGELOG.md release/ || true
+
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ github.run_number }}
           name: DarkFox OS v${{ github.run_number }}
-          body: |
-            DarkFox OS - XFCE live system, bootable on BIOS and UEFI.
-
-            **Login:** user `darkfox`, password `live` (autologin in live mode).
-            **Secure Boot must be turned off** in the laptop BIOS.
-
-            Write to USB with Rufus (DD mode), balenaEtcher, or:
-            `sudo dd if=darkfox-os.iso of=/dev/sdX bs=4M status=progress oflag=sync`
-
-            If the ISO was split into `darkfox-os.iso.part00`, `.part01`, ... join the parts first:
-            Linux: `cat darkfox-os.iso.part* > darkfox-os.iso`
-            Windows: `copy /b darkfox-os.iso.part00+darkfox-os.iso.part01+darkfox-os.iso.part02 darkfox-os.iso`
+          body_path: release-notes.md
           files: release/*
