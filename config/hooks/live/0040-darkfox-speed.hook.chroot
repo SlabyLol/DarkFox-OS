@@ -1,0 +1,22 @@
+#!/bin/sh
+set -e
+echo "=== DarkFox OS: faster start ==="
+
+# Timers and services that only slow down a live system on a USB stick
+systemctl disable apt-daily.timer apt-daily-upgrade.timer man-db.timer \
+    e2scrub_all.timer fstrim.timer 2>/dev/null || true
+systemctl mask NetworkManager-wait-online.service ModemManager.service 2>/dev/null || true
+
+# Docker would start at every boot (and does not work well on the live overlay filesystem)
+systemctl disable docker.service docker.socket containerd.service 2>/dev/null || true
+
+# GNOME Software must not run in the background after login (heavy on a slow stick)
+rm -f /etc/xdg/autostart/gnome-software-service.desktop
+
+# Pre-generate the languages, so they are not built at every start
+if [ -f /etc/locale.gen ]; then
+    sed -i -E 's/^# *(de_DE\.UTF-8 UTF-8)/\1/; s/^# *(en_US\.UTF-8 UTF-8)/\1/' /etc/locale.gen
+    locale-gen || true
+fi
+
+echo "=== faster start done ==="
