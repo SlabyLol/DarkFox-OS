@@ -46,19 +46,21 @@ for S in 32 48 64 128 256; do
 done
 gtk-update-icon-cache -f /usr/share/icons/hicolor 2>/dev/null || true
 
-# boot splash logo: fox above the text
-convert -background none -font "$F" -pointsize 96 \
-    -fill '#e8eefc' label:"Dark" -fill '#ff7a1a' label:"Fox" \
-    \( -size 28x10 xc:none \) -fill '#e8eefc' label:"OS" +append +repage "$W/text.png" || true
+# boot splash logo: fox above the text (explicit steps, so settings cannot leak)
+convert -background none -font "$F" -pointsize 96 -fill '#e8eefc' label:"Dark" "$W/t1.png"
+convert -background none -font "$F" -pointsize 96 -fill '#ff7a1a' label:"Fox"  "$W/t2.png"
+convert -background none -font "$F" -pointsize 96 -fill '#e8eefc' label:"OS"   "$W/t3.png"
+convert -size 28x10 xc:none "$W/gap.png"
+convert "$W/t1.png" "$W/t2.png" "$W/gap.png" "$W/t3.png" -background none -gravity center +append +repage "$W/text.png" || true
 convert "$W/fox.png" -resize 150x150 "$W/text.png" -background none -gravity center -append +repage \
     /usr/share/plymouth/themes/darkfox/logo.png || echo "plymouth logo failed"
 
-# wallpaper: gradient + big faint fox + faint name
-convert -size 1920x1080 gradient:'#0b0f1a-#1b2340' \
-    \( "$W/fox.png" -resize 560x560 -channel A -evaluate multiply 0.10 +channel \) \
-    -gravity center -geometry +0-40 -composite \
-    \( -background none -font "$F" -pointsize 54 -fill 'rgba(255,255,255,0.22)' label:"DarkFox OS" \) \
-    -gravity south -geometry +0+70 -composite \
+# wallpaper: gradient + big faint fox + faint name (explicit steps, so settings cannot leak)
+convert -size 1920x1080 gradient:'#0b0f1a-#1b2340' "$W/base.png"
+convert "$W/fox.png" -resize 560x560 -channel A -evaluate multiply 0.14 +channel "$W/fox_wm.png"
+convert "$W/base.png" "$W/fox_wm.png" -gravity center -geometry +0-40 -composite "$W/step1.png"
+convert -background none -font "$F" -pointsize 54 -fill 'rgba(255,255,255,0.22)' label:"DarkFox OS" "$W/wp_text.png"
+convert "$W/step1.png" "$W/wp_text.png" -gravity south -geometry +0+70 -composite \
     /usr/share/backgrounds/darkfox.png || echo "wallpaper failed"
 
 # ------------------------------------------------------------------
@@ -229,69 +231,4 @@ put $XFCONF/xfce4-panel.xml << EOF
     </property>
     <property name="plugin-3" type="string" value="tasklist">
       <property name="grouping" type="uint" value="1"/>
-      <property name="flat-buttons" type="bool" value="true"/>
-      <property name="show-handle" type="bool" value="false"/>
-      <property name="show-labels" type="bool" value="true"/>
-    </property>
-    <property name="plugin-4" type="string" value="separator">
-      <property name="style" type="uint" value="0"/>
-    </property>
-    <property name="plugin-5" type="string" value="systray">
-      <property name="show-frame" type="bool" value="false"/>
-      <property name="size-max" type="uint" value="22"/>
-    </property>
-    <property name="plugin-6" type="string" value="pulseaudio"/>
-    <property name="plugin-7" type="string" value="power-manager-plugin"/>
-    <property name="plugin-8" type="string" value="clock">
-      <property name="digital-layout" type="uint" value="2"/>
-      <property name="digital-date-format" type="string" value="%a %d.%m."/>
-      <property name="digital-time-format" type="string" value="%H:%M"/>
-    </property>
-    <property name="plugin-9" type="string" value="showdesktop"/>$LAUNCHER_XML
-  </property>
-</channel>
-EOF
-
-# ------------------------------------------------------------------
-# 5. Login screen
-# ------------------------------------------------------------------
-cat > /etc/lightdm/lightdm-gtk-greeter.conf << 'EOF'
-[greeter]
-background=/usr/share/backgrounds/darkfox.png
-theme-name=Arc-Dark
-icon-theme-name=Papirus-Dark
-font-name=Noto Sans 11
-xft-antialias=true
-clock-format=%H:%M  -  %d.%m.%Y
-indicators=~host;~spacer;~clock;~spacer;~session;~a11y;~power
-panel-position=top
-EOF
-
-# ------------------------------------------------------------------
-# 6. Installer (Calamares): colours and logo
-# ------------------------------------------------------------------
-for f in $(find /etc/calamares /usr/share/calamares -name branding.desc 2>/dev/null); do
-    d=$(dirname "$f")
-    sed -i -E '
-        s/^([[:space:]]*sidebarBackground:[[:space:]]*).*/\1"#0b0f1a"/
-        s/^([[:space:]]*sidebarText:[[:space:]]*).*/\1"#e8eefc"/
-        s/^([[:space:]]*sidebarTextSelect:[[:space:]]*).*/\1"#ff7a1a"/
-        s/^([[:space:]]*sidebarTextHighlight:[[:space:]]*).*/\1"#1b2340"/
-    ' "$f"
-    for key in productLogo productIcon; do
-        img=$(sed -n -E "s/^[[:space:]]*$key:[[:space:]]*\"?([^\"#[:space:]]+)\"?.*/\1/p" "$f" | head -n1)
-        case "$img" in
-            *.png) [ -f "$d/$img" ] && cp /usr/share/pixmaps/darkfox-logo.png "$d/$img" ;;
-        esac
-    done
-    echo "installer design updated: $f"
-done
-
-# ------------------------------------------------------------------
-# 7. Finish: ownership + rebuild initramfs (new boot splash logo)
-# ------------------------------------------------------------------
-chown -R darkfox:darkfox /home/darkfox 2>/dev/null || true
-rm -rf "$W"
-update-initramfs -u -k all || echo "initramfs update failed"
-
-echo "=== Design done ==="
+      <property
